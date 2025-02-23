@@ -1,0 +1,62 @@
+# config.yaml
+data:
+  pred_model: CGFormer
+model:
+  embed_dim: 64
+
+  loss_weight_cfg:
+    loss_voxel_ce_weight: 1.0
+    loss_voxel_sem_scal_weight: 1.0
+    loss_voxel_geo_scal_weight: 1.0
+
+  balance_cls_weight: True
+
+  class_names:
+    - unlabeled
+    - car
+    - bicycle
+    - motorcycle
+    - truck
+    - other-vehicle
+    - person
+    - bicyclist
+    - motorcyclist
+    - road
+    - parking
+    - sidewalk
+    - other-ground
+    - building
+    - fence
+    - vegetation
+    - trunk
+    - terrain
+    - pole
+    - traffic-sign
+  num_class: 20
+  save_path: 
+  test_mapping: False
+  pretrain: False
+
+
+
+training:
+  seed: 7240
+  log_every_n_steps: 50
+  check_val_every_n_epoch: 1
+  training_steps: 25000
+
+optimizer:
+    type: AdamW
+    lr: 0.00003
+    weight_decay: 0.01
+
+
+lr_scheduler:
+    type: OneCycleLR
+    max_lr: 0.00003
+    total_steps: 25000
+    pct_start: 0.05
+    cycle_momentum: False
+    anneal_strategy: cos
+    interval: step
+    frequency: 1

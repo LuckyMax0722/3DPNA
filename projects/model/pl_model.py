@@ -1,0 +1,214 @@
+import os
+import torch
+import numpy as np
+
+import pytorch_lightning as pl
+
+from projects.loss import SSCMetrics
+from projects.loss import get_inv_map
+
+
+class pl_model(pl.LightningModule):
+    def __init__(
+        self,
+        model,
+        config
+        ):
+        super(pl_model, self).__init__()
+
+        self.model = model
+        self.config = config
+
+        self.num_class = config['model']['num_class']
+        self.class_names = config['model']['class_names']
+
+        self.train_metrics = SSCMetrics(config['model']['num_class'])
+        self.val_metrics = SSCMetrics(config['model']['num_class'])
+        self.test_metrics = SSCMetrics(config['model']['num_class'])
+        self.save_path = config['model']['save_path']
+        self.test_mapping = config['model']['test_mapping']
+        self.pretrain = config['model']['pretrain']
+        
+    def forward_train(self, data_dict):
+        gt_occ = data_dict['gt_occ']  # [1, 256, 256, 32]
+        gt_occ_2 = data_dict['gt_occ_2']  # [1, 128, 128, 16]
+        gt_occ_4 = data_dict['gt_occ_4']  # [1, 64, 64, 8]
+        gt_occ_8 = data_dict['gt_occ_8']  # [1, 32, 32, 4]
+
+        input_occ = data_dict['input_occ'] # [1, 256, 256, 32]
+        
+        losses = dict()
+
+        x1, x2, x4, x8 = self.model(input_occ)
+
+        losses_occupancy = self.model.loss(
+            output_voxels_list=[x1['ssc_logit'], x2['ssc_logit'], x4['ssc_logit'], x8['ssc_logit']],
+            target_voxels_list=[gt_occ, gt_occ_2, gt_occ_4, gt_occ_8],
+        )
+
+        losses.update(losses_occupancy)
+
+        pred = x1['ssc_logit']
+        pred = torch.argmax(pred, dim=1)
+            
+        train_output = {
+            'losses': losses,
+            'pred': pred,
+            'gt_occ': gt_occ
+        }
+
+        return train_output
+
+    def forward_test(self, data_dict):
+        input_occ = data_dict['input_occ'] # [1, 256, 256, 32]
+        gt_occ = data_dict['gt_occ']
+
+      
+        x1, x2, x4, x8 = self.model(input_occ)
+        
+        pred = x1['ssc_logit']
+        pred = torch.argmax(pred, dim=1)
+
+        test_output = {
+            'pred': pred,
+            'gt_occ': gt_occ
+        }
+
+        return test_output
+        
+    def forward(self, data_dict):
+        if self.training:
+            return self.forward_train(data_dict)
+        else:
+            return self.forward_test(data_dict)
+
+            
+    def training_step(self, batch, batch_idx):
+        output_dict = self.forward(batch)
+        loss_dict = output_dict['losses']
+        loss = 0
+        for key, value in loss_dict.items():
+            self.log(
+                "train/"+key,
+                value.detach(),
+                on_epoch=True,
+                sync_dist=True)
+            loss += value
+            
+        self.log("train/loss",
+            loss.detach(),
+            on_epoch=True,
+            sync_dist=True)
+        
+        if not self.pretrain:
+            pred = output_dict['pred'].detach().cpu().numpy()
+            gt_occ = output_dict['gt_occ'].detach().cpu().numpy()
+            
+            self.train_metrics.add_batch(pred, gt_occ)
+
+        return loss
+    
+    def validation_step(self, batch, batch_idx):
+        
+        output_dict = self.forward(batch)
+        
+        if not self.pretrain:
+            pred = output_dict['pred'].detach().cpu().numpy()
+            gt_occ = output_dict['gt_occ'].detach().cpu().numpy()
+
+            self.val_metrics.add_batch(pred, gt_occ)
+    
+    def on_validation_epoch_end(self):
+        metric_list = [("train", self.train_metrics), ("val", self.val_metrics)]
+        # metric_list = [("val", self.val_metrics)]
+        
+        metrics_list = metric_list
+        
+        for prefix, metric in metrics_list:
+            stats = metric.get_stats()
+
+            if prefix == 'val':
+                for name, iou in zip(self.class_names, stats['iou_ssc']):
+                    self.log("{}/{}/IoU".format(prefix, name), torch.tensor(iou, dtype=torch.float32).cuda(), sync_dist=True)
+                
+            self.log("{}/mIoU".format(prefix), torch.tensor(stats["iou_ssc_mean"], dtype=torch.float32).cuda(), sync_dist=True)
+            self.log("{}/IoU".format(prefix), torch.tensor(stats["iou"], dtype=torch.float32).cuda(), sync_dist=True)
+            self.log("{}/Precision".format(prefix), torch.tensor(stats["precision"], dtype=torch.float32).cuda(), sync_dist=True)
+            self.log("{}/Recall".format(prefix), torch.tensor(stats["recall"], dtype=torch.float32).cuda(), sync_dist=True)
+            
+            metric.reset()
+        
+    def test_step(self, batch, batch_idx):
+        output_dict = self.forward(batch)
+
+        pred = output_dict['pred'].detach().cpu().numpy()
+        gt_occ = output_dict['gt_occ']
+        if gt_occ is not None:
+            gt_occ = gt_occ.detach().cpu().numpy()
+        else:
+            gt_occ = None
+            
+        if self.save_path is not None:
+            if self.test_mapping:
+                inv_map = get_inv_map()
+                output_voxels = inv_map[pred].astype(np.uint16)
+            else:
+                output_voxels = pred.astype(np.uint16)
+            sequence_id = batch['img_metas']['sequence'][0]
+            frame_id = batch['img_metas']['frame_id'][0]
+            save_folder = "{}/sequences/{}/predictions".format(self.save_path, sequence_id)
+            save_file = os.path.join(save_folder, "{}.label".format(frame_id))
+            os.makedirs(save_folder, exist_ok=True)
+            with open(save_file, 'wb') as f:
+                output_voxels.tofile(f)
+                print('\n save to {}'.format(save_file))
+            
+        if gt_occ is not None:
+            self.test_metrics.add_batch(pred, gt_occ)
+    
+    def on_test_epoch_end(self):
+        metric_list = [("test", self.test_metrics)]
+        # metric_list = [("val", self.val_metrics)]
+        metrics_list = metric_list
+        for prefix, metric in metrics_list:
+            stats = metric.get_stats()
+
+            for name, iou in zip(self.class_names, stats['iou_ssc']):
+                print(name + ":", iou)
+
+            self.log("{}/mIoU".format(prefix), torch.tensor(stats["iou_ssc_mean"], dtype=torch.float32), sync_dist=True)
+            self.log("{}/IoU".format(prefix), torch.tensor(stats["iou"], dtype=torch.float32), sync_dist=True)
+            self.log("{}/Precision".format(prefix), torch.tensor(stats["precision"], dtype=torch.float32), sync_dist=True)
+            self.log("{}/Recall".format(prefix), torch.tensor(stats["recall"], dtype=torch.float32), sync_dist=True)
+            metric.reset()
+
+    def configure_optimizers(self):
+        if self.config['optimizer']['type'] == 'AdamW':
+
+            optimizer = torch.optim.AdamW(
+                self.parameters(),
+                lr=self.config['optimizer']['lr'],
+                weight_decay=self.config['optimizer']['weight_decay']
+            )
+
+        else:
+            raise NotImplementedError(f"Optimizer {self.config['optimizer']['type']} is not implemented.")
+        
+        if self.config['lr_scheduler']['type'] == 'OneCycleLR':
+            lr_scheduler = torch.optim.lr_scheduler.OneCycleLR(
+                optimizer,
+                max_lr=self.config['lr_scheduler']['max_lr'],
+                total_steps=self.config['lr_scheduler']['total_steps'],
+                pct_start=self.config['lr_scheduler']['pct_start'],
+                cycle_momentum=self.config['lr_scheduler']['cycle_momentum'],
+                anneal_strategy=self.config['lr_scheduler']['anneal_strategy'])
+
+            interval=self.config['lr_scheduler']['interval']
+            frequency=self.config['lr_scheduler']['frequency']
+        else:
+            raise NotImplementedError(f"lr_scheduler {self.config['lr_scheduler']['type']} is not implemented.")
+        
+        scheduler = {'scheduler': lr_scheduler, 'interval': interval, 'frequency': frequency}
+        
+        return {'optimizer': optimizer, 'lr_scheduler': scheduler}
+    
