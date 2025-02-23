@@ -35,4 +35,6 @@ pip3 install natten==0.17.4+torch200cu117 -f https://shi-labs.com/natten/wheels
 **e. Fix bugs (known now)**
 
 ```shell
+pip install mmengine==0.10.6
+pip install mmcv==2.2.0 -f https://download.openmmlab.com/mmcv/dist/cu117/torch2.0/index.html
 ```

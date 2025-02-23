@@ -1,16 +1,13 @@
-# config.yaml
 data:
   pred_model: CGFormer
+
 model:
   embed_dim: 64
-
   loss_weight_cfg:
     loss_voxel_ce_weight: 1.0
     loss_voxel_sem_scal_weight: 1.0
     loss_voxel_geo_scal_weight: 1.0
-
-  balance_cls_weight: True
-
+  balance_cls_weight: true
   class_names:
     - unlabeled
     - car
@@ -33,11 +30,9 @@ model:
     - pole
     - traffic-sign
   num_class: 20
-  save_path: 
-  test_mapping: False
-  pretrain: False
-
-
+  save_path: null
+  test_mapping: false
+  pretrain: false
 
 training:
   seed: 7240
@@ -46,17 +41,16 @@ training:
   training_steps: 25000
 
 optimizer:
-    type: AdamW
-    lr: 0.00003
-    weight_decay: 0.01
-
+  type: AdamW
+  lr: 0.00003
+  weight_decay: 0.01
 
 lr_scheduler:
-    type: OneCycleLR
-    max_lr: 0.00003
-    total_steps: 25000
-    pct_start: 0.05
-    cycle_momentum: False
-    anneal_strategy: cos
-    interval: step
-    frequency: 1
+  type: OneCycleLR
+  max_lr: 0.00003
+  total_steps: 25000
+  pct_start: 0.05
+  cycle_momentum: false
+  anneal_strategy: cos
+  interval: step
+  frequency: 1

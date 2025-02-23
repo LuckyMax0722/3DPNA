@@ -18,6 +18,9 @@ CONF.PATH.LOG_DIR = os.path.join(CONF.PATH.BASE, 'output')
 ## ckpt
 CONF.PATH.CKPT_DIR = os.path.join(CONF.PATH.BASE, 'ckpts')
 
+## config
+CONF.PATH.CONFIG_DIR = os.path.join(CONF.PATH.BASE, 'configs')
+
 #
 CONF.semantic_kitti_class_frequencies = [
         5.41773033e09, 1.57835390e07, 1.25136000e05, 1.18809000e05, 6.46799000e05,

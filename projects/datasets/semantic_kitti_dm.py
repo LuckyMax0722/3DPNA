@@ -30,7 +30,7 @@ class SemanticKITTIDataModule(pl.LightningDataModule):
         return DataLoader(
             self.train_dataset,
             batch_size=self.batch_size,
-            drop_last=True,
+            drop_last=False,
             num_workers=self.num_workers,
             shuffle=True,
             pin_memory=True)

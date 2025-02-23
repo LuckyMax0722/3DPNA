@@ -22,9 +22,10 @@ class pl_model(pl.LightningModule):
         self.num_class = config['model']['num_class']
         self.class_names = config['model']['class_names']
 
-        self.train_metrics = SSCMetrics(config['model']['num_class'])
-        self.val_metrics = SSCMetrics(config['model']['num_class'])
-        self.test_metrics = SSCMetrics(config['model']['num_class'])
+        self.train_metrics = SSCMetrics()
+        self.val_metrics = SSCMetrics()
+        self.test_metrics = SSCMetrics()
+
         self.save_path = config['model']['save_path']
         self.test_mapping = config['model']['test_mapping']
         self.pretrain = config['model']['pretrain']
@@ -88,23 +89,16 @@ class pl_model(pl.LightningModule):
         loss_dict = output_dict['losses']
         loss = 0
         for key, value in loss_dict.items():
-            self.log(
-                "train/"+key,
-                value.detach(),
-                on_epoch=True,
-                sync_dist=True)
+            self.log(f"train/{key}", value.detach(), on_epoch=True, sync_dist=True)
             loss += value
-            
-        self.log("train/loss",
-            loss.detach(),
-            on_epoch=True,
-            sync_dist=True)
+
+        self.log("train/loss", loss.detach(), on_epoch=True, sync_dist=True, prog_bar=True)
         
         if not self.pretrain:
-            pred = output_dict['pred'].detach().cpu().numpy()
-            gt_occ = output_dict['gt_occ'].detach().cpu().numpy()
-            
-            self.train_metrics.add_batch(pred, gt_occ)
+            pred = output_dict['pred'].detach()
+            gt_occ = output_dict['gt_occ'].detach()
+
+            self.train_metrics.update(pred, gt_occ)
 
         return loss
     
@@ -113,10 +107,10 @@ class pl_model(pl.LightningModule):
         output_dict = self.forward(batch)
         
         if not self.pretrain:
-            pred = output_dict['pred'].detach().cpu().numpy()
-            gt_occ = output_dict['gt_occ'].detach().cpu().numpy()
-
-            self.val_metrics.add_batch(pred, gt_occ)
+            pred = output_dict['pred'].detach()
+            gt_occ = output_dict['gt_occ'].detach()
+            
+            self.val_metrics.update(pred, gt_occ)
     
     def on_validation_epoch_end(self):
         metric_list = [("train", self.train_metrics), ("val", self.val_metrics)]
@@ -125,17 +119,18 @@ class pl_model(pl.LightningModule):
         metrics_list = metric_list
         
         for prefix, metric in metrics_list:
-            stats = metric.get_stats()
+            stats = metric.compute()
 
             if prefix == 'val':
                 for name, iou in zip(self.class_names, stats['iou_ssc']):
-                    self.log("{}/{}/IoU".format(prefix, name), torch.tensor(iou, dtype=torch.float32).cuda(), sync_dist=True)
-                
-            self.log("{}/mIoU".format(prefix), torch.tensor(stats["iou_ssc_mean"], dtype=torch.float32).cuda(), sync_dist=True)
-            self.log("{}/IoU".format(prefix), torch.tensor(stats["iou"], dtype=torch.float32).cuda(), sync_dist=True)
-            self.log("{}/Precision".format(prefix), torch.tensor(stats["precision"], dtype=torch.float32).cuda(), sync_dist=True)
-            self.log("{}/Recall".format(prefix), torch.tensor(stats["recall"], dtype=torch.float32).cuda(), sync_dist=True)
-            
+                    #self.log("{}/{}/IoU".format(prefix, name), torch.tensor(iou, dtype=torch.float32).cuda(), sync_dist=True)
+                    self.log(f"{prefix}/{name}/IoU", iou, sync_dist=True)
+
+            self.log(f"{prefix}/mIoU", stats["iou_ssc_mean"], sync_dist=True)
+            self.log(f"{prefix}/IoU", stats["iou"], sync_dist=True)
+            self.log(f"{prefix}/Precision", stats["precision"], sync_dist=True)
+            self.log(f"{prefix}/Recall", stats["recall"], sync_dist=True)
+
             metric.reset()
         
     def test_step(self, batch, batch_idx):
@@ -144,7 +139,7 @@ class pl_model(pl.LightningModule):
         pred = output_dict['pred'].detach().cpu().numpy()
         gt_occ = output_dict['gt_occ']
         if gt_occ is not None:
-            gt_occ = gt_occ.detach().cpu().numpy()
+            gt_occ = gt_occ.detach()
         else:
             gt_occ = None
             
@@ -164,22 +159,24 @@ class pl_model(pl.LightningModule):
                 print('\n save to {}'.format(save_file))
             
         if gt_occ is not None:
-            self.test_metrics.add_batch(pred, gt_occ)
+            self.test_metrics.update(pred, gt_occ)
     
     def on_test_epoch_end(self):
         metric_list = [("test", self.test_metrics)]
         # metric_list = [("val", self.val_metrics)]
         metrics_list = metric_list
         for prefix, metric in metrics_list:
-            stats = metric.get_stats()
+            stats = metric.compute()
 
             for name, iou in zip(self.class_names, stats['iou_ssc']):
+                #print(name + ":", iou)
                 print(name + ":", iou)
 
-            self.log("{}/mIoU".format(prefix), torch.tensor(stats["iou_ssc_mean"], dtype=torch.float32), sync_dist=True)
-            self.log("{}/IoU".format(prefix), torch.tensor(stats["iou"], dtype=torch.float32), sync_dist=True)
-            self.log("{}/Precision".format(prefix), torch.tensor(stats["precision"], dtype=torch.float32), sync_dist=True)
-            self.log("{}/Recall".format(prefix), torch.tensor(stats["recall"], dtype=torch.float32), sync_dist=True)
+            self.log(f"{prefix}/mIoU", stats["iou_ssc_mean"], sync_dist=True)
+            self.log(f"{prefix}/IoU", stats["iou"], sync_dist=True)
+            self.log(f"{prefix}/Precision", stats["precision"], sync_dist=True)
+            self.log(f"{prefix}/Recall", stats["recall"], sync_dist=True)
+
             metric.reset()
 
     def configure_optimizers(self):

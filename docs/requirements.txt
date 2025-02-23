@@ -5,4 +5,5 @@ fvcore
 einops
 torchmetrics
 pytorch-lightning==2.3.3
-tensorboard
+tensorboard==2.12.0
+six
