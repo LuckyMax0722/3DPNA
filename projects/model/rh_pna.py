@@ -181,7 +181,7 @@ class UNet(nn.Module):
                 skip_version,
                 conv_version,
 
-                ffn_cfg
+                ffn_cfg,
                 num_heads,
                 kernel_size,
                 dilation,
@@ -278,8 +278,6 @@ class UNet(nn.Module):
             conv_version=conv_version
         )
 
-    
-
         
     def forward(self, x):  # [b, geo_feat_channels, X, Y, Z]   
         
@@ -301,7 +299,7 @@ class UNet(nn.Module):
         
         x2 = self.pna_block_2(skip2, x3)  # x: ([1, 64, 128, 128, 16])
         
-        x1 = self.decoder_block_4(skip1, x2)  # x: ([1, 64, 256, 256, 32])
+        x1 = self.decoder_block_1(skip1, x2)  # x: ([1, 64, 256, 256, 32])
         
         return x4, x3, x2, x1
 

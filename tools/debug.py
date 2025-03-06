@@ -24,7 +24,7 @@ def compare_folder_file_count(folder1, folder2):
 for i in ["00", "01", "02", "03", "04", "05", "06", "07", "09", "08", "10"]:
     
     folder1 = os.path.join('/u/home/caoh/datasets/SemanticKITTI/dataset/labels',i)
-    folder2 = os.path.join('/u/home/caoh/datasets/SemanticKITTI/dataset/pred/CGFormer',i)
+    folder2 = os.path.join('/u/home/caoh/datasets/SemanticKITTI/dataset/pred/MonoScene',i)
     compare_folder_file_count(folder1, folder2)
 
     print('===============')

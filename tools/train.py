@@ -15,7 +15,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 from configs.config import CONF
 from projects.datasets import SemanticKITTIDataModule, SemanticKITTIDataset
 
-from projects.model import RefHead, pl_model, RefHead_PNA
+from projects.model import RefHead, pl_model, RefHead_PNA, RefHead_VQ, RefHead_CVAE
 
 def check_path(path):
     if not os.path.exists(path):
@@ -34,17 +34,24 @@ def load_config(config_path):
 # python /u/home/caoh/projects/MA_Jiachen/3DPNA/tools/train.py
 
 def main():
-    version = 'pna'
-    debug = True
+    model_version = 'cvae'  # small, pna, vqvae cvae
+    baseline_model = 'CGFormer'  # CGFormer, MonoScene
+    debug = False
+
+    skip_version='none'  # plus, concat, none
+    encoder_version='conv'  # conv, aspp
+    conv_version='v2'   # v1, v2
+    head_version='conv'     # mlp, conv
+
+    use_skip=True
+
 
     if debug:
         log_folder = '/u/home/caoh/projects/MA_Jiachen/3DPNA/a_tmp'
     else:
-        log_folder = path_log_dir
+        log_folder = CONF.PATH.LOG_DIR
 
-    if version == 'small' or 'pna':
-        yaml_config = os.path.join(CONF.PATH.CONFIG_DIR, 'REF_CGFormer.yaml')
-    
+    yaml_config = os.path.join(CONF.PATH.CONFIG_DIR, ('REF_' + baseline_model + '.yaml'))
 
     with open(yaml_config, "r") as f:
         config = yaml.safe_load(f)
@@ -62,7 +69,7 @@ def main():
         pred_model=config["data"]["pred_model"],
         )
 
-    if version == 'small':
+    if model_version == 'small':
         model = RefHead(
             num_class=config["model"]["num_class"],
             geo_feat_channels=config["model"]["embed_dim"],
@@ -70,12 +77,32 @@ def main():
             balance_cls_weight=config["model"]["balance_cls_weight"],
             class_frequencies=CONF.semantic_kitti_class_frequencies,
             
-            skip_version='plus',
-            conv_version='v1',
-            head_version='conv'
+            skip_version=skip_version,
+            encoder_version=encoder_version,
+            conv_version=conv_version,
+            head_version=head_version,
+
+            use_skip=use_skip
         )
 
-    elif version == 'pna':
+    elif model_version == 'cvae':
+        model = RefHead_CVAE(
+            num_class=config["model"]["num_class"],
+            geo_feat_channels=config["model"]["embed_dim"],
+            loss_weight_cfg=config["model"]["loss_weight_cfg"],
+            balance_cls_weight=config["model"]["balance_cls_weight"],
+            class_frequencies=CONF.semantic_kitti_class_frequencies,
+            
+            skip_version=skip_version,
+            encoder_version=encoder_version,
+            conv_version=conv_version,
+            head_version=head_version,
+
+            use_skip=use_skip,
+            latent_dim=512
+        )
+
+    elif model_version == 'pna':
         ffn_cfg=dict(
             type='FFN',
             embed_dims=config["model"]["embed_dim"],
@@ -86,7 +113,7 @@ def main():
             add_identity=True
         )
 
-        kernel_size = [[3,3,3], [5,5,5], [7,7,7]]
+        kernel_size = [[3,3,3], [5,5,5], [5,5,5]]
         dilation = [[1,1,1], [1,1,1], [1,1,1]]
 
         model = RefHead_PNA(
@@ -96,9 +123,9 @@ def main():
             balance_cls_weight=config["model"]["balance_cls_weight"],
             class_frequencies=CONF.semantic_kitti_class_frequencies,
 
-            skip_version='plus',
-            conv_version='v1',
-            head_version='conv'
+            skip_version=skip_version,
+            conv_version=conv_version,
+            head_version=head_version,
 
 
             ffn_cfg=ffn_cfg,
@@ -111,9 +138,23 @@ def main():
             proj_drop=0.1,
             use_fna=False,
         )
-    
+
+    elif model_version == 'vqvae':
+        model = RefHead_VQ(
+            num_class = config["model"]["num_class"],
+            init_size = 32,
+            l_size = '882',
+            l_attention = True,
+            vq_size = 50,
+            loss_weight_cfg=config["model"]["loss_weight_cfg"],
+            balance_cls_weight=config["model"]["balance_cls_weight"],
+            class_frequencies=CONF.semantic_kitti_class_frequencies,
+        )
+
+
     model = pl_model(
         model=model,
+        model_version=model_version,
         config=config
     )
 
@@ -151,6 +192,7 @@ def main():
             find_unused_parameters=False
         ),
         max_steps=config["training"]['training_steps'],
+        max_epochs=config["training"]['training_epochs'],
         #resume_from_checkpoint=config['load_from'],
         callbacks=[
             checkpoint_callback,

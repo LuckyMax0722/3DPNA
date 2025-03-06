@@ -13,10 +13,11 @@ CONF.PATH.DATA_ROOT = '/u/home/caoh/datasets/SemanticKITTI/dataset'
 CONF.PATH.DATA_LABEL = os.path.join(CONF.PATH.DATA_ROOT, 'labels')
 
 ## log
-CONF.PATH.LOG_DIR = os.path.join(CONF.PATH.BASE, 'output')
+CONF.PATH.LOG_DIR = os.path.join(CONF.PATH.BASE, 'output_new')
 
 ## ckpt
 CONF.PATH.CKPT_DIR = os.path.join(CONF.PATH.BASE, 'ckpts')
+CONF.PATH.CKPT_RESNET = os.path.join(CONF.PATH.CKPT_DIR, 'resnet50-19c8e357.pth')
 
 ## config
 CONF.PATH.CONFIG_DIR = os.path.join(CONF.PATH.BASE, 'configs')
