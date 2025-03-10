@@ -34,11 +34,11 @@ def load_config(config_path):
 # python /u/home/caoh/projects/MA_Jiachen/3DPNA/tools/train.py
 
 def main():
-    model_version = 'cvae'  # small, pna, vqvae cvae
+    model_version = 'pna'  # small, pna, vqvae cvae
     baseline_model = 'CGFormer'  # CGFormer, MonoScene
     debug = False
 
-    skip_version='none'  # plus, concat, none
+    skip_version='concat'  # plus, concat, none
     encoder_version='conv'  # conv, aspp
     conv_version='v2'   # v1, v2
     head_version='conv'     # mlp, conv
@@ -99,7 +99,7 @@ def main():
             head_version=head_version,
 
             use_skip=use_skip,
-            latent_dim=512
+            latent_dim=256
         )
 
     elif model_version == 'pna':
@@ -113,7 +113,7 @@ def main():
             add_identity=True
         )
 
-        kernel_size = [[3,3,3], [5,5,5], [5,5,5]]
+        kernel_size = [[3,3,3], [3,3,3], [5,5,5]]
         dilation = [[1,1,1], [1,1,1], [1,1,1]]
 
         model = RefHead_PNA(
