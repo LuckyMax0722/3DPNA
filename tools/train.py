@@ -15,7 +15,8 @@ from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 from configs.config import CONF
 from projects.datasets import SemanticKITTIDataModule, SemanticKITTIDataset
 
-from projects.model import RefHead, pl_model, RefHead_PNA, RefHead_VQ, RefHead_CVAE
+from projects.model import RefHead, pl_model, pl_model_diff, RefHead_PNA, RefHead_VQ, RefHead_CVAE
+from projects.model.diffusion import RefHead_D
 
 def check_path(path):
     if not os.path.exists(path):
@@ -34,9 +35,9 @@ def load_config(config_path):
 # python /u/home/caoh/projects/MA_Jiachen/3DPNA/tools/train.py
 
 def main():
-    model_version = 'pna'  # small, pna, vqvae cvae
+    model_version = 'diffusion'  # small, pna, vqvae cvae, diffusion
     baseline_model = 'CGFormer'  # CGFormer, MonoScene
-    debug = False
+    debug = True
 
     skip_version='concat'  # plus, concat, none
     encoder_version='conv'  # conv, aspp
@@ -151,12 +152,23 @@ def main():
             class_frequencies=CONF.semantic_kitti_class_frequencies,
         )
 
+    elif model_version == 'diffusion':
+        model = RefHead_D()
 
-    model = pl_model(
-        model=model,
-        model_version=model_version,
-        config=config
-    )
+    
+
+    if model_version == 'diffusion':
+        model = pl_model_diff(
+            model=model,
+            model_version=model_version,
+            config=config
+        )
+    else:
+        model = pl_model(
+            model=model,
+            model_version=model_version,
+            config=config
+        )
 
     check_path(log_folder)
     check_path(os.path.join(log_folder, 'tensorboard'))
