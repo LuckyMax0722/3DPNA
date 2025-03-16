@@ -49,6 +49,8 @@ class SemanticKITTIDataset(Dataset):
         self.data_infos = self.load_annotations(self.ann_file)
 
         self.img_config = img_config
+
+        color_jitter = False
         self.color_jitter = (
             transforms.ColorJitter(*color_jitter) if color_jitter else None
         )
@@ -57,6 +59,15 @@ class SemanticKITTIDataset(Dataset):
                 transforms.ToTensor(),
                 transforms.Normalize(
                     mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]
+                ),
+            ]
+        )
+
+        self.normalize_img_seg = transforms.Compose(
+            [
+                transforms.ToTensor(),
+                transforms.Normalize(
+                    mean=[0.5, 0.5, 0.5],  std=[0.5, 0.5, 0.5]
                 ),
             ]
         )
@@ -146,7 +157,7 @@ class SemanticKITTIDataset(Dataset):
         input_dict['gt_occ_8'] = self.get_ann_info(index, key='voxel_path_8')
         
         # load images
-        input_dict['img'] = self.get_images_info(index, key='img_2_path')
+        input_dict['img'], input_dict['img_seg'] = self.get_images_info(index, key='img_2_path')
 
       
         return input_dict
@@ -250,11 +261,13 @@ class SemanticKITTIDataset(Dataset):
         )
 
         if self.color_jitter and self.split == 'train':
-                img = self.color_jitter(img)
+            img = self.color_jitter(img)
+
+        img_seg = img.copy()
 
         img = self.normalize_img(img)
-
-        return img
+        img_seg = self.normalize_img_seg(img_seg)
+        return img, img_seg
 
 
     def load_annotations(self, ann_file=None):

@@ -245,3 +245,5 @@ output_new/tensorboard/CGFormer_pna_355_plus_v2_conv/hparams.yaml
 output_new/tensorboard/MonoScene_aspp_plus_v2_conv/events.out.tfevents.1741392609.i6-gpu-1.3104520.0
 output_new/tensorboard/MonoScene_aspp_plus_v2_conv/hparams.yaml
 output_new/tensorboard/version_0/events.out.tfevents.1741551759.i6-gpu-1.3196636.0
+ckpts/demo_e200.bak
+ckpts/demo_e200.ckpt

@@ -40,3 +40,9 @@ pip install mmcv==2.1.0 -f https://download.openmmlab.com/mmcv/dist/cu117/torch2
 pip install mmdet==3.3.0
 #pip install mmdet3d==1.4.0
 ```
+
+pip install -e /u/home/caoh/projects/MA_Jiachen/3DPNA
+
+## for LSEG
+pip install git+https://github.com/zhanghang1989/PyTorch-Encoding/
+pip install git+https://github.com/openai/CLIP.git

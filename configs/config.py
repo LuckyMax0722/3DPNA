@@ -18,10 +18,13 @@ CONF.PATH.LOG_DIR = os.path.join(CONF.PATH.BASE, 'output_new')
 ## ckpt
 CONF.PATH.CKPT_DIR = os.path.join(CONF.PATH.BASE, 'ckpts')
 CONF.PATH.CKPT_RESNET = os.path.join(CONF.PATH.CKPT_DIR, 'resnet50-19c8e357.pth')
+CONF.PATH.CKPT_LSEG = os.path.join(CONF.PATH.CKPT_DIR, 'demo_e200.ckpt')
 
 ## config
 CONF.PATH.CONFIG_DIR = os.path.join(CONF.PATH.BASE, 'configs')
 
+# Demo
+CONF.PATH.DEMO = os.path.join(CONF.PATH.BASE, 'demo')
 #
 CONF.semantic_kitti_class_frequencies = [
         5.41773033e09, 1.57835390e07, 1.25136000e05, 1.18809000e05, 6.46799000e05,

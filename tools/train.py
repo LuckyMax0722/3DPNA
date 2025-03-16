@@ -37,7 +37,7 @@ def load_config(config_path):
 def main():
     model_version = 'diffusion'  # small, pna, vqvae cvae, diffusion
     baseline_model = 'CGFormer'  # CGFormer, MonoScene
-    debug = True
+    debug = False
 
     skip_version='concat'  # plus, concat, none
     encoder_version='conv'  # conv, aspp
