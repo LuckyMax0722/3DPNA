@@ -10,6 +10,7 @@ import numpy as np
 import pytorch_lightning as pl
 
 from projects.model.lseg.models import LSegNet
+import torchvision.transforms as transforms
 
 # Vis
 from PIL import Image
@@ -41,6 +42,21 @@ def pad_image(img, mean, std, crop_size):
         img_pad[:,i,:,:] = F.pad(img[:,i,:,:], (0, padw, 0, padh), value=pad_values[i])
     assert(img_pad.size(2)>=crop_size and img_pad.size(3)>=crop_size)
     return img_pad
+
+def get_image(img_path):
+    crop_size = 480
+    padding = [0.0] * 3
+    image = Image.open(img_path)
+    image = np.array(image)
+    transform = transforms.Compose(
+        [
+            transforms.ToTensor(),
+            transforms.Normalize([0.5, 0.5, 0.5], [0.5, 0.5, 0.5]),
+        ]
+    )
+    image = transform(image).unsqueeze(0)
+
+    return image
 
 def get_new_pallete(num_cls):
     n = num_cls
@@ -76,6 +92,9 @@ def get_new_mask_pallete(npimg, new_palette, out_label_flag=False, labels=None):
             patches.append(red_patch)
     return out_img, patches
 
+def check_path(path):
+    if not os.path.exists(path):
+        os.makedirs(path)
 
 class LSegModule(pl.LightningModule):
     def __init__(
@@ -116,12 +135,13 @@ class LSegModule(pl.LightningModule):
         if True:
             for param in self.parameters():
                 param.requires_grad = False
+        
+        self.img_seg_dir = os.path.join(CONF.PATH.DATA_SEG, 'Lseg')
 
 
     def forward(self, x):
         return self.net(x)
     
-
     def model_infer(self, x, target=None):
         pred = self.forward(x)
         if isinstance(pred, (tuple, list)):
@@ -240,9 +260,8 @@ class LSegModule(pl.LightningModule):
 
         print(f'vis images are svaed to {CONF.PATH.DEMO}')
 
-
     def get_labels(self):
-        label_src = 'car,bicycle,motorcycle,truck,vehicle,person,bicyclist,motorcyclist,road,parking,sidewalk,other-ground,building,fence,vegetation,trunk,terrain,pole,traffic-sign,other'
+        label_src = 'other,car,bicycle,motorcycle,truck,other-vehicle,person,bicyclist,motorcyclist,road,parking,sidewalk,other-ground,building,fence,vegetation,trunk,terrain,pole,traffic-sign'
 
         labels = []
         lines = label_src.split(',')
@@ -251,6 +270,20 @@ class LSegModule(pl.LightningModule):
             labels.append(label)
         
         return labels
+
+    def predict_step(self, batch, batch_idx):
+        img_seg_dir_seq = os.path.join(self.img_seg_dir, batch['sequence'][0])
+        
+        check_path(img_seg_dir_seq)
+
+        scores = self.infer(batch['img_seg'])
+
+        predict = torch.max(scores[0].unsqueeze(0), 1)[1].cpu().numpy()
+
+        output_file = os.path.join(img_seg_dir_seq, batch['frame_id'][0])
+
+        np.save(output_file, predict)
+
 
 
 
@@ -269,6 +302,9 @@ if __name__ == '__main__':
     ).eval().cuda()
 
     with torch.no_grad():
-        l.infer(image, vis=False)
+        scores = l.infer(image, vis=False)
 
-    # python /u/home/caoh/projects/MA_Jiachen/3DPNA/projects/model/rh_tpv_seg.py
+    predict = torch.max(scores[0].unsqueeze(0), 1)[1].cpu().numpy()
+
+    print(predict.shape)
+    # python /u/home/caoh/projects/MA_Jiachen/3DPNA/projects/model/lseg/lseg_net.py

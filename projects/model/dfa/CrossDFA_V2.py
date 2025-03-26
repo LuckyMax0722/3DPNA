@@ -7,7 +7,7 @@ from mmcv.cnn.bricks.transformer import build_feedforward_network
 
 from einops import rearrange
 
-class CrossDFA(nn.Module):
+class CrossDFAV2(nn.Module):
     def __init__(
         self,
         geo_feat_channels,
@@ -18,35 +18,9 @@ class CrossDFA(nn.Module):
         heads,
         ffn_cfg,
     ):
-        super(CrossDFA, self).__init__()
+        super(CrossDFAV2, self).__init__()
         self.shape = shape
 
-        self.feat_resize_1 = nn.Sequential(
-            nn.Conv2d(img_feat_channels, img_feat_channels, kernel_size=3, padding=1),
-            nn.InstanceNorm2d(img_feat_channels),
-            nn.LeakyReLU(1e-1, True),
-            nn.Upsample(size=(shape[0], shape[1]), mode='bilinear', align_corners=True),
-            nn.Conv2d(img_feat_channels, kv_dim, kernel_size=3, padding=1),
-            nn.InstanceNorm2d(kv_dim),
-        )
-
-        self.feat_resize_2 = nn.Sequential(
-            nn.Conv2d(img_feat_channels, img_feat_channels, kernel_size=3, padding=1),
-            nn.InstanceNorm2d(img_feat_channels),
-            nn.LeakyReLU(1e-1, True),
-            nn.Upsample(size=(shape[0], shape[2]), mode='bilinear', align_corners=True),
-            nn.Conv2d(img_feat_channels, kv_dim, kernel_size=3, padding=1),
-            nn.InstanceNorm2d(kv_dim),
-        )
-
-        self.feat_resize_3 = nn.Sequential(
-            nn.Conv2d(img_feat_channels, img_feat_channels, kernel_size=3, padding=1),
-            nn.InstanceNorm2d(img_feat_channels),
-            nn.LeakyReLU(1e-1, True),
-            nn.Upsample(size=(shape[1], shape[2]), mode='bilinear', align_corners=True),
-            nn.Conv2d(img_feat_channels, kv_dim, kernel_size=3, padding=1),
-            nn.InstanceNorm2d(kv_dim),
-        )
 
         self.dfca_xy = DeformableCrossAttention2D(
             dim=geo_feat_channels,

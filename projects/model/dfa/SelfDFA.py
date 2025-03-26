@@ -38,13 +38,8 @@ class SelfDFA(nn.Module):
         )
 
         # Self Aggragation
-        self.norm_input_1 =nn.InstanceNorm2d(geo_feat_channels)
-        self.norm_input_2 =nn.InstanceNorm2d(geo_feat_channels)
-        self.norm_input_3 =nn.InstanceNorm2d(geo_feat_channels)
-
-        self.norm_output_1 =nn.InstanceNorm2d(geo_feat_channels)
-        self.norm_output_2 =nn.InstanceNorm2d(geo_feat_channels)
-        self.norm_output_3 =nn.InstanceNorm2d(geo_feat_channels)
+        self.norm_input =nn.InstanceNorm2d(geo_feat_channels)
+        self.norm_output =nn.InstanceNorm2d(geo_feat_channels)
 
         # FFN Layer
         self.ffn_xy = build_feedforward_network(ffn_cfg)
@@ -53,23 +48,23 @@ class SelfDFA(nn.Module):
 
     def forward(self, tpv_feat):
         # use_residual
-        identity_xy = tpv_feat[0].clone()
-        identity_xz = tpv_feat[1].clone()
-        identity_yz = tpv_feat[2].clone()
+        identity_xy = tpv_feat[0]
+        identity_xz = tpv_feat[1]
+        identity_yz = tpv_feat[2]
 
         # Norm
-        self_xy = self.norm_input_1(tpv_feat[0])
-        self_xz = self.norm_input_2(tpv_feat[1])
-        self_yz = self.norm_input_3(tpv_feat[2])
+        self_xy = self.norm_input(tpv_feat[0])
+        self_xz = self.norm_input(tpv_feat[1])
+        self_yz = self.norm_input(tpv_feat[2])
 
         # DeformableSelfAttention2D
         self_xy = self.dfa_xy(self_xy)
         self_xz = self.dfa_xz(self_xz)
         self_yz = self.dfa_yz(self_yz)
 
-        self_xy = self.norm_output_1(self_xy + identity_xy)
-        self_xz = self.norm_output_2(self_xz + identity_xz)
-        self_yz = self.norm_output_3(self_yz + identity_yz)
+        self_xy = self.norm_output(self_xy + identity_xy)
+        self_xz = self.norm_output(self_xz + identity_xz)
+        self_yz = self.norm_output(self_yz + identity_yz)
 
 
         # FFN Rearrange

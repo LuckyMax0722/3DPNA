@@ -15,7 +15,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
 from configs.config import CONF
 from projects.datasets import SemanticKITTIDataModule, SemanticKITTIDataset
 
-from projects.model import RefHead, pl_model, pl_model_diff, RefHead_PNA, RefHead_VQ, RefHead_CVAE
+from projects.model import RefHead, pl_model, pl_model_diff, pl_model_lseg, RefHead_PNA, RefHead_VQ, RefHead_CVAE, RefHead_TPV_Lseg, RefHead_TPV_Lseg_V2
 from projects.model.diffusion import RefHead_D
 
 def check_path(path):
@@ -35,7 +35,7 @@ def load_config(config_path):
 # python /u/home/caoh/projects/MA_Jiachen/3DPNA/tools/train.py
 
 def main():
-    model_version = 'diffusion'  # small, pna, vqvae cvae, diffusion
+    model_version = 'lseg'  # small, pna, vqvae cvae, diffusion, lseg
     baseline_model = 'CGFormer'  # CGFormer, MonoScene
     debug = False
 
@@ -155,7 +155,77 @@ def main():
     elif model_version == 'diffusion':
         model = RefHead_D()
 
+    elif model_version == 'lseg':
+        ffn_cfg=dict(
+            type='FFN',
+            embed_dims=32,
+            feedforward_channels=1024,
+            num_fcs=2,
+            act_cfg=dict(type='ReLU', inplace=True),
+            ffn_drop=0.1,
+            add_identity=True
+        )
+
+        TPV_version = 'v2'
+
+        if TPV_version == 'v1':
+            model = RefHead_TPV_Lseg(
+                num_class=config["model"]["num_class"],
+                geo_feat_channels=32,
+                img_feat_channels=2048,
+                kv_dim=256,
+                z_down=True,
+
+                dim_head=16,
+                heads=2,
+                ffn_cfg=ffn_cfg,
+
+                loss_weight_cfg=config["model"]["loss_weight_cfg"],
+                balance_cls_weight=config["model"]["balance_cls_weight"],
+                class_frequencies=CONF.semantic_kitti_class_frequencies,
+            )
+
+            model = pl_model_lseg(
+                model=model,
+                model_version=model_version,
+                TPV_version=TPV_version,
+                config=config
+            )
+
+
+        elif TPV_version == 'v2':
+            model = RefHead_TPV_Lseg_V2(
+                num_class=config["model"]["num_class"],
+                geo_feat_channels=32,
+                img_feat_channels=2048,
+                kv_dim=256,
+                z_down=True,
+
+                dim_head=16,
+                heads=2,
+                ffn_cfg=ffn_cfg,
+
+                loss_weight_cfg=config["model"]["loss_weight_cfg"],
+                balance_cls_weight=config["model"]["balance_cls_weight"],
+                class_frequencies=CONF.semantic_kitti_class_frequencies,
+            )
+
+            model = pl_model_lseg(
+                model=model,
+                model_version=model_version,
+                TPV_version=TPV_version,
+                config=config
+            )
+
+
     
+        dm = SemanticKITTIDataModule(
+            dataset=SemanticKITTIDataset,
+            data_root=CONF.PATH.DATA_ROOT,
+            ann_file=CONF.PATH.DATA_LABEL,
+            pred_model=config["data"]["pred_model"],
+            vlm_model='Lseg'
+            )
 
     if model_version == 'diffusion':
         model = pl_model_diff(
@@ -163,6 +233,10 @@ def main():
             model_version=model_version,
             config=config
         )
+
+    elif model_version == 'lseg':
+        pass
+
     else:
         model = pl_model(
             model=model,
@@ -191,9 +265,9 @@ def main():
         dirpath=os.path.join(log_folder, f'ckpts/version_{version}'),
         monitor='val/mIoU',
         mode='max',
-        save_top_k=-1,
-        save_last=False,
-        filename='epoch_{epoch:03d}-mIoU={val/mIoU:.4f}'
+        save_top_k=1,
+        save_last=True,
+        filename='{val/mIoU:.4f}'
         )
 
     # trainer
@@ -205,7 +279,6 @@ def main():
         ),
         max_steps=config["training"]['training_steps'],
         max_epochs=config["training"]['training_epochs'],
-        #resume_from_checkpoint=config['load_from'],
         callbacks=[
             checkpoint_callback,
             LearningRateMonitor(logging_interval='step')
@@ -217,6 +290,7 @@ def main():
         check_val_every_n_epoch=config["training"]['check_val_every_n_epoch']
     )
 
+    #trainer.fit(model=model, datamodule=dm, ckpt_path="/u/home/caoh/projects/MA_Jiachen/3DPNA/output_new/ckpts/version_1/epoch_epoch=009-mIoU=val/mIoU=0.1720.ckpt")
     trainer.fit(model=model, datamodule=dm)
     
 if __name__ == "__main__":

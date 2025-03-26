@@ -11,6 +11,7 @@ CONF.PATH.BASE = '/u/home/caoh/projects/MA_Jiachen/3DPNA'  # TODO: Change path t
 ## data
 CONF.PATH.DATA_ROOT = '/u/home/caoh/datasets/SemanticKITTI/dataset'
 CONF.PATH.DATA_LABEL = os.path.join(CONF.PATH.DATA_ROOT, 'labels')
+CONF.PATH.DATA_SEG = os.path.join(CONF.PATH.DATA_ROOT, 'seg')
 
 ## log
 CONF.PATH.LOG_DIR = os.path.join(CONF.PATH.BASE, 'output_new')
@@ -19,6 +20,7 @@ CONF.PATH.LOG_DIR = os.path.join(CONF.PATH.BASE, 'output_new')
 CONF.PATH.CKPT_DIR = os.path.join(CONF.PATH.BASE, 'ckpts')
 CONF.PATH.CKPT_RESNET = os.path.join(CONF.PATH.CKPT_DIR, 'resnet50-19c8e357.pth')
 CONF.PATH.CKPT_LSEG = os.path.join(CONF.PATH.CKPT_DIR, 'demo_e200.ckpt')
+CONF.PATH.CKPT_SWIN = '/u/home/caoh/projects/MA_Jiachen/CGFormer/ckpts/swin_tiny_patch4_window7_224.pth'
 
 ## config
 CONF.PATH.CONFIG_DIR = os.path.join(CONF.PATH.BASE, 'configs')

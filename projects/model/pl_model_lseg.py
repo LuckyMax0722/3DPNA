@@ -13,6 +13,7 @@ class pl_model_lseg(pl.LightningModule):
         self,
         model,
         model_version,
+        TPV_version,
         config
         ):
         super(pl_model_lseg, self).__init__()
@@ -20,6 +21,7 @@ class pl_model_lseg(pl.LightningModule):
         self.model = model
         self.model_version = model_version
         self.config = config
+        self.TPV_version = TPV_version
 
         self.num_class = config['model']['num_class']
         self.class_names = config['model']['class_names']
@@ -33,58 +35,65 @@ class pl_model_lseg(pl.LightningModule):
         self.pretrain = config['model']['pretrain']
         
     def forward_train(self, data_dict):
-        img = data_dict['img']
-        gt_occ = data_dict['gt_occ']  # [1, 256, 256, 32]
-        gt_occ_2 = data_dict['gt_occ_2']  # [1, 128, 128, 16]
-        gt_occ_4 = data_dict['gt_occ_4']  # [1, 64, 64, 8]
-        gt_occ_8 = data_dict['gt_occ_8']  # [1, 32, 32, 4]
+        image = data_dict['img']
+        image_seg = data_dict['img_seg']
+
+        gt_occ_256 = data_dict['gt_occ']  # [1, 256, 256, 32]
+        gt_occ_128 = data_dict['gt_occ_2']  # [1, 128, 128, 16]
+        gt_occ_64 = data_dict['gt_occ_4']  # [1, 64, 64, 8]
+        gt_occ_32 = data_dict['gt_occ_8']  # [1, 32, 32, 4]
 
         input_occ = data_dict['input_occ'] # [1, 256, 256, 32]
         
         losses = dict()
 
-        x1, x2, x4, x8 = self.model(input_occ, img)
+        if self.TPV_version == 'v1':
+            x_32, x_64, x_128, x_256 = self.model(input_occ, image, image_seg)
 
-        losses_occupancy = self.model.loss(
-            output_voxels_list=[x1['ssc_logit'], x2['ssc_logit'], x4['ssc_logit'], x8['ssc_logit']],
-            target_voxels_list=[gt_occ, gt_occ_2, gt_occ_4, gt_occ_8],
-        )
+            losses_occupancy = self.model.loss(
+                output_voxels_list=[x_32, x_64, x_128, x_256],
+                target_voxels_list=[gt_occ_32, gt_occ_64, gt_occ_128, gt_occ_256],
+            )
+        
+        elif self.TPV_version == 'v2':
+            x_128, x_256 = self.model(input_occ, image, image_seg)
 
-
+            losses_occupancy = self.model.loss(
+                output_voxels_list=[x_128, x_256],
+                target_voxels_list=[gt_occ_128, gt_occ_256],
+            )
 
         losses.update(losses_occupancy)
 
-        pred = x1['ssc_logit']
-        pred = torch.argmax(pred, dim=1)
+        x_256 = torch.argmax(x_256, dim=1)
             
         train_output = {
             'losses': losses,
-            'pred': pred,
-            'gt_occ': gt_occ
+            'pred': x_256,
+            'gt_occ': gt_occ_256
         }
 
         return train_output
 
     def forward_test(self, data_dict):
-        img = data_dict['img']
+        image = data_dict['img']
+        image_seg = data_dict['img_seg']
+
+        gt_occ_256 = data_dict['gt_occ']  # [1, 256, 256, 32]
+
         input_occ = data_dict['input_occ'] # [1, 256, 256, 32]
-        gt_occ = data_dict['gt_occ']
 
+        if self.TPV_version == 'v1':
+            x_32, x_64, x_128, x_256 = self.model(input_occ, image, image_seg)
 
-        if self.model_version == 'vqvae':
-            x1, x2, x4, _ = self.model(input_occ)
-        elif self.model_version == 'cvae':
-            x1, x2, x4, x8 = self.model(input_occ, img)
-        else:
-            x1, x2, x4, x8 = self.model(input_occ)
-
+        elif self.TPV_version == 'v2':
+            x_128, x_256 = self.model(input_occ, image, image_seg)
         
-        pred = x1['ssc_logit']
-        pred = torch.argmax(pred, dim=1)
+        x_256 = torch.argmax(x_256, dim=1)
 
         test_output = {
-            'pred': pred,
-            'gt_occ': gt_occ
+            'pred': x_256,
+            'gt_occ': gt_occ_256
         }
 
         return test_output
@@ -190,6 +199,13 @@ class pl_model_lseg(pl.LightningModule):
             self.log(f"{prefix}/Recall", stats["recall"], sync_dist=True)
 
             metric.reset()
+
+    # def on_after_backward(self):
+    #     print("on_after_backward enter")
+    #     for name, param in self.named_parameters():
+    #         if param.requires_grad and param.grad is None:
+    #             print(f"{name}")
+    #     print("on_after_backward exit")
 
     def configure_optimizers(self):
         if self.config['optimizer']['type'] == 'AdamW':

@@ -38,8 +38,8 @@ training:
   seed: 7240
   log_every_n_steps: 50
   check_val_every_n_epoch: 1
-  training_steps: 30000
-  training_epochs: 10
+  training_steps: 40000
+  training_epochs: 20
 
 optimizer:
   type: AdamW
@@ -49,7 +49,7 @@ optimizer:
 lr_scheduler:
   type: OneCycleLR
   max_lr: 0.00003
-  total_steps: 30000
+  total_steps: 40000
   pct_start: 0.05
   cycle_momentum: false
   anneal_strategy: cos

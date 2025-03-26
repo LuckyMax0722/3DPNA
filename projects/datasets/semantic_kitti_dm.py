@@ -8,6 +8,7 @@ class SemanticKITTIDataModule(pl.LightningDataModule):
         data_root,
         ann_file,
         pred_model,
+        vlm_model=None,
         batch_size=1,
         num_workers=4,
     ):
@@ -17,15 +18,15 @@ class SemanticKITTIDataModule(pl.LightningDataModule):
         self.data_root = data_root
         self.ann_file = ann_file
         self.pred_model = pred_model
-
+        self.vlm_model = vlm_model
         self.batch_size = batch_size
         self.num_workers = num_workers
     
     def setup(self, stage=None):
-        self.train_dataset = self.dataset(self.data_root, self.ann_file, self.pred_model, 'train')
-        self.test_dataset = self.dataset(self.data_root, self.ann_file, self.pred_model, 'val')
-        self.val_dataset = self.dataset(self.data_root, self.ann_file, self.pred_model, 'test')
-    
+        self.train_dataset = self.dataset(self.data_root, self.ann_file, self.pred_model, 'train', vlm_model=self.vlm_model)
+        self.test_dataset = self.dataset(self.data_root, self.ann_file, self.pred_model, 'val', vlm_model=self.vlm_model)
+        self.val_dataset = self.dataset(self.data_root, self.ann_file, self.pred_model, 'test', vlm_model=self.vlm_model)
+
     def train_dataloader(self):
         return DataLoader(
             self.train_dataset,
@@ -52,3 +53,4 @@ class SemanticKITTIDataModule(pl.LightningDataModule):
             num_workers=self.num_workers,
             shuffle=False,
             pin_memory=True)
+    

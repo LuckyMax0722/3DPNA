@@ -8,7 +8,7 @@ from torchvision import transforms
 
 from torch.utils.data import Dataset
 
-class SemanticKITTIDataset(Dataset):
+class SemanticKITTILsegDataset(Dataset):
     def __init__(
         self,
         data_root,
@@ -17,7 +17,6 @@ class SemanticKITTIDataset(Dataset):
         split,
         occ_size=[256, 256, 32],
         pc_range=[0, -25.6, -2, 51.2, 25.6, 4.4],
-        vlm_model=None,
         test_mode=False,
 
         img_config={
@@ -32,10 +31,7 @@ class SemanticKITTIDataset(Dataset):
         color_jitter=(0.4, 0.4, 0.4)
     ):
         self.splits = {
-            "train": ["00", "01", "02", "03", "04", "05", "06", "07", "09", "10"],
-            "val": ["08"],
-            "test": ["08"],
-            "test_submit": ["11", "12", "13", "14", "15", "16", "17", "18", "19", "20", "21"],
+            "predict": ["00", "01", "02", "03", "04", "05", "06", "07", "08", "09", "10"],
         }
         self.split = split
         self.sequences = self.splits[split]
@@ -43,7 +39,6 @@ class SemanticKITTIDataset(Dataset):
         self.data_root = data_root
         self.ann_file = ann_file
         self.pred_model = pred_model
-        self.vlm_model = vlm_model
         self.occ_size = occ_size
         self.pc_range = pc_range
         self.test_mode = test_mode
@@ -56,7 +51,6 @@ class SemanticKITTIDataset(Dataset):
         self.color_jitter = (
             transforms.ColorJitter(*color_jitter) if color_jitter else None
         )
-
         self.normalize_img = transforms.Compose(
             [
                 transforms.ToTensor(),
@@ -66,24 +60,18 @@ class SemanticKITTIDataset(Dataset):
             ]
         )
 
+        self.normalize_img_seg = transforms.Compose(
+            [
+                transforms.ToTensor(),
+                transforms.Normalize(
+                    mean=[0.5, 0.5, 0.5],  std=[0.5, 0.5, 0.5]
+                ),
+            ]
+        )
 
     def __len__(self):
         return len(self.data_infos)
 
-    def convert_to_tensor(self, input_dict):
-        # Convert numpy arrays to tensors and set data types
-        if input_dict['input_occ'] is not None:
-            input_dict['input_occ'] = torch.from_numpy(input_dict['input_occ']).long()
-        if input_dict['gt_occ'] is not None:
-            input_dict['gt_occ'] = torch.from_numpy(input_dict['gt_occ']).long()
-        if input_dict['gt_occ_2'] is not None:
-            input_dict['gt_occ_2'] = torch.from_numpy(input_dict['gt_occ_2']).long()
-        if input_dict['gt_occ_4'] is not None:
-            input_dict['gt_occ_4'] = torch.from_numpy(input_dict['gt_occ_4']).long()
-        if input_dict['gt_occ_8'] is not None:
-            input_dict['gt_occ_8'] = torch.from_numpy(input_dict['gt_occ_8']).long()
-        
-        return input_dict
 
     def prepare_train_data(self, index):
         """
@@ -98,7 +86,7 @@ class SemanticKITTIDataset(Dataset):
             print('found None in training data')
             return None
         
-        return self.convert_to_tensor(input_dict)
+        return input_dict
     
     def prepare_test_data(self, index):
         """
@@ -113,7 +101,7 @@ class SemanticKITTIDataset(Dataset):
             print('found None in training data')
             return None
 
-        return self.convert_to_tensor(input_dict)
+        return input_dict
     
     def __getitem__(self, idx):
         if self.test_mode:
@@ -141,43 +129,16 @@ class SemanticKITTIDataset(Dataset):
             sequence = info['sequence'],
             frame_id = info['frame_id'],
         )
-
-        # load input voxels
-        input_dict['input_occ'] = self.get_input_info(index, key='occ_path')
-
-        # gt_occ is None for test-set
-        input_dict['gt_occ'] = self.get_ann_info(index, key='voxel_path')
-        input_dict['gt_occ_2'] = self.get_ann_info(index, key='voxel_path_2')
-        input_dict['gt_occ_4'] = self.get_ann_info(index, key='voxel_path_4')
-        input_dict['gt_occ_8'] = self.get_ann_info(index, key='voxel_path_8')
         
         # load images
-        input_dict['img'] = self.get_images_info(index, key='img_2_path')
+        input_dict['img'], input_dict['img_seg'] = self.get_images_info(index, key='img_2_path')
 
-        # load seg images
-        if self.vlm_model:
-            input_dict['img_seg'] = self.get_images_seg_info(index, key='img_seg_path')
-
-      
         return input_dict
-
-    def get_ann_info(self, index, key='voxel_path'):
-        info = self.data_infos[index][key]
-        return None if info is None else np.load(info)
-    
-    def get_input_info(self, index, key='occ_path'):
-        info = self.data_infos[index][key]
-        return None if info is None else np.load(info)
 
     def get_images_info(self, index, key='img_2_path'):
         info = self.data_infos[index][key]
         
         return self.load_image(info)
-    
-    def get_images_seg_info(self, index, key='img_seg_path'):
-        info = self.data_infos[index][key]
-        
-        return self.load_image_seg(info)
 
 
     def get_rot(self,h):
@@ -254,7 +215,7 @@ class SemanticKITTIDataset(Dataset):
         # perform image-view augmentation
         post_rot = torch.eye(2)
         post_trans = torch.zeros(2)
-        
+
         img_augs = self.sample_augmentation(H=img.height, W=img.width, flip=flip, scale=scale)
 
         resize, resize_dims, crop, flip, rotate = img_augs
@@ -267,16 +228,12 @@ class SemanticKITTIDataset(Dataset):
         if self.color_jitter and self.split == 'train':
             img = self.color_jitter(img)
 
+        img_seg = img.copy()
 
         img = self.normalize_img(img)
+        img_seg = self.normalize_img_seg(img_seg)
+        return img, img_seg
 
-        return img
-
-    def load_image_seg(self, img_filename, flip=None, scale=None):
-        img = np.load(img_filename)
-        img = torch.from_numpy(img)
-
-        return img
 
     def load_annotations(self, ann_file=None):
         scans = []
@@ -285,67 +242,34 @@ class SemanticKITTIDataset(Dataset):
             voxel_base_path = os.path.join(self.ann_file, sequence)
             img_base_path = os.path.join(self.data_root, "sequences", sequence)   
 
-            if self.vlm_model:
-                img_seg_base_path = os.path.join(self.data_root, "seg", self.vlm_model, sequence)
-
             id_base_path = os.path.join(self.data_root, "pred", self.pred_model, sequence, '*.npy')
 
             for id_path in glob.glob(id_base_path):
                 img_id = id_path.split("/")[-1].split(".")[0]
 
-                # gt
-                voxel_path = os.path.join(voxel_base_path, img_id + '_1_1.npy')
-                voxel_path_2 = os.path.join(voxel_base_path, img_id + '_1_2.npy')
-                voxel_path_4 = os.path.join(voxel_base_path, img_id + '_1_4.npy')
-                voxel_path_8 = os.path.join(voxel_base_path, img_id + '_1_8.npy')
-
                 # image
                 img_2_path = os.path.join(img_base_path, 'image_2', img_id + '.png')
                 
-                if self.vlm_model:
-                    img_seg_path = os.path.join(img_seg_base_path, img_id + '.npy')
-                else:
-                    img_seg_path = None
-
-
-                # for sweep demo or test submission
-                if not os.path.exists(voxel_path):
-                    voxel_path = None
-                if not os.path.exists(voxel_path_2):
-                    voxel_path_2 = None
-                if not os.path.exists(voxel_path_4):
-                    voxel_path_4 = None
-                if not os.path.exists(voxel_path_8):
-                    voxel_path_8 = None
-
                 scans.append(
                     {   
                         "sequence": sequence,
                         "frame_id": img_id,
-                        "occ_path": id_path,
-                        "voxel_path": voxel_path,
-                        "voxel_path_2": voxel_path_2,
-                        "voxel_path_4": voxel_path_4,
-                        "voxel_path_8": voxel_path_8,
                         "img_2_path": img_2_path,
-                        "img_seg_path": img_seg_path
                     })
                 
         return scans  # return to self.data_infos
 
 
 if __name__ == '__main__':
-    s = SemanticKITTIDataset(
+    s = SemanticKITTILsegDataset(
         data_root='/u/home/caoh/datasets/SemanticKITTI/dataset',
         ann_file='/u/home/caoh/datasets/SemanticKITTI/dataset/labels',
         pred_model='CGFormer',
-        vlm_model='Lseg',
-        split='train',
+        split='predict',
         occ_size=[256, 256, 32],
         pc_range=[0, -25.6, -2, 51.2, 25.6, 4.4],
     )
 
-    print(s[0]['img'].size())
-    print(s[0]['img_seg'].size())
+    print(s[0])
     #print(s[0]['gt_occ'])
     #print(s[0]['gt_occ_2'])

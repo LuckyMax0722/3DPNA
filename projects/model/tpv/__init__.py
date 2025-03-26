@@ -1,1 +1,1 @@
-from .TPVEncoder import TPVEncoder
+from .TPVAE import TPVAE
