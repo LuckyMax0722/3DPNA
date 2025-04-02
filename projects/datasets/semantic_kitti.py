@@ -18,6 +18,7 @@ class SemanticKITTIDataset(Dataset):
         occ_size=[256, 256, 32],
         pc_range=[0, -25.6, -2, 51.2, 25.6, 4.4],
         vlm_model=None,
+        text_model=None,
         test_mode=False,
 
         img_config={
@@ -44,6 +45,7 @@ class SemanticKITTIDataset(Dataset):
         self.ann_file = ann_file
         self.pred_model = pred_model
         self.vlm_model = vlm_model
+        self.text_model = text_model
         self.occ_size = occ_size
         self.pc_range = pc_range
         self.test_mode = test_mode
@@ -158,7 +160,10 @@ class SemanticKITTIDataset(Dataset):
         if self.vlm_model:
             input_dict['img_seg'] = self.get_images_seg_info(index, key='img_seg_path')
 
-      
+        # load text
+        if self.text_model:
+            input_dict['text'] = self.get_text_info(index, key='text_path')
+
         return input_dict
 
     def get_ann_info(self, index, key='voxel_path'):
@@ -179,6 +184,10 @@ class SemanticKITTIDataset(Dataset):
         
         return self.load_image_seg(info)
 
+    def get_text_info(self, index, key='text_path'):
+        info = self.data_infos[index][key]
+        
+        return self.load_text(info)
 
     def get_rot(self,h):
         return torch.Tensor([
@@ -278,6 +287,12 @@ class SemanticKITTIDataset(Dataset):
 
         return img
 
+    def load_text(self, text_filename):
+        text = np.load(text_filename)
+        text = torch.from_numpy(text)
+
+        return text
+
     def load_annotations(self, ann_file=None):
         scans = []
         for sequence in self.sequences:
@@ -287,6 +302,9 @@ class SemanticKITTIDataset(Dataset):
 
             if self.vlm_model:
                 img_seg_base_path = os.path.join(self.data_root, "seg", self.vlm_model, sequence)
+
+            if self.text_model:
+                text_base_path = os.path.join(self.data_root, "text", self.text_model, sequence)
 
             id_base_path = os.path.join(self.data_root, "pred", self.pred_model, sequence, '*.npy')
 
@@ -307,6 +325,10 @@ class SemanticKITTIDataset(Dataset):
                 else:
                     img_seg_path = None
 
+                if self.text_model:
+                    text_path = os.path.join(text_base_path, img_id + '.npy')
+                else:
+                    img_seg_path = None
 
                 # for sweep demo or test submission
                 if not os.path.exists(voxel_path):
@@ -328,24 +350,30 @@ class SemanticKITTIDataset(Dataset):
                         "voxel_path_4": voxel_path_4,
                         "voxel_path_8": voxel_path_8,
                         "img_2_path": img_2_path,
-                        "img_seg_path": img_seg_path
+                        "img_seg_path": img_seg_path,
+                        "text_path": text_path
                     })
                 
         return scans  # return to self.data_infos
 
 
 if __name__ == '__main__':
+    # python /u/home/caoh/projects/MA_Jiachen/3DPNA/projects/datasets/semantic_kitti.py
+
     s = SemanticKITTIDataset(
         data_root='/u/home/caoh/datasets/SemanticKITTI/dataset',
         ann_file='/u/home/caoh/datasets/SemanticKITTI/dataset/labels',
         pred_model='CGFormer',
-        vlm_model='Lseg',
+        #vlm_model='Lseg',
+        text_model='Blip2',
         split='train',
         occ_size=[256, 256, 32],
         pc_range=[0, -25.6, -2, 51.2, 25.6, 4.4],
     )
 
-    print(s[0]['img'].size())
-    print(s[0]['img_seg'].size())
-    #print(s[0]['gt_occ'])
-    #print(s[0]['gt_occ_2'])
+    for i in range(1000):
+        #print(s[0]['img'].size())
+        #print(s[0]['img_seg'].size())
+        print(s[i]['text'].size())
+        #print(s[0]['gt_occ'])
+        #print(s[0]['gt_occ_2'])

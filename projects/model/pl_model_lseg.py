@@ -62,6 +62,26 @@ class pl_model_lseg(pl.LightningModule):
                 output_voxels_list=[x_128, x_256],
                 target_voxels_list=[gt_occ_128, gt_occ_256],
             )
+        
+        elif self.TPV_version == 'v3':
+            x_256, loss_contrastive = self.model(input_occ, image, image_seg)
+
+            losses.update(loss_contrastive)
+
+            losses_occupancy = self.model.loss(
+                output_voxels_list=[x_256],
+                target_voxels_list=[gt_occ_256],
+            )
+
+        elif self.TPV_version == 'fs':
+            x_32, x_64, x_128, x_256, loss_contrastive = self.model(input_occ, image_seg)
+
+            losses.update(loss_contrastive)
+
+            losses_occupancy = self.model.loss(
+                output_voxels_list=[x_32, x_64, x_128, x_256],
+                target_voxels_list=[gt_occ_32, gt_occ_64, gt_occ_128, gt_occ_256],
+            )
 
         losses.update(losses_occupancy)
 
@@ -89,6 +109,12 @@ class pl_model_lseg(pl.LightningModule):
         elif self.TPV_version == 'v2':
             x_128, x_256 = self.model(input_occ, image, image_seg)
         
+        elif self.TPV_version == 'v3':
+            x_256, _ = self.model(input_occ, image, image_seg)
+
+        elif self.TPV_version == 'fs':
+            _, _, _, x_256, _ = self.model(input_occ, image_seg)
+
         x_256 = torch.argmax(x_256, dim=1)
 
         test_output = {

@@ -42,6 +42,8 @@ pip install mmdet==3.3.0
 ```
 
 pip install -e /u/home/caoh/projects/MA_Jiachen/3DPNA
+ 
+pip install -e .
 
 ## for LSEG
 pip install git+https://github.com/zhanghang1989/PyTorch-Encoding/

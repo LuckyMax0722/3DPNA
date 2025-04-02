@@ -12,6 +12,7 @@ CONF.PATH.BASE = '/u/home/caoh/projects/MA_Jiachen/3DPNA'  # TODO: Change path t
 CONF.PATH.DATA_ROOT = '/u/home/caoh/datasets/SemanticKITTI/dataset'
 CONF.PATH.DATA_LABEL = os.path.join(CONF.PATH.DATA_ROOT, 'labels')
 CONF.PATH.DATA_SEG = os.path.join(CONF.PATH.DATA_ROOT, 'seg')
+CONF.PATH.DATA_TEXT = os.path.join(CONF.PATH.DATA_ROOT, 'text')
 
 ## log
 CONF.PATH.LOG_DIR = os.path.join(CONF.PATH.BASE, 'output_new')

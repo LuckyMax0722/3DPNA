@@ -39,13 +39,8 @@ class RefHead_TPV_Lseg_V3(nn.Module):
         num_class,
         geo_feat_channels,
         img_feat_channels,
-        kv_dim,
         z_down,
-
-        dim_head,
-        heads,
-        ffn_cfg,
-    
+        use_sgm='no_use',
         empty_idx=0,
         loss_weight_cfg=None,
         balance_cls_weight=True,
@@ -74,13 +69,6 @@ class RefHead_TPV_Lseg_V3(nn.Module):
             padding_mode=padding_mode
         )
 
-        self.geo_encoder_128 = Encoder(
-            geo_feat_channels=geo_feat_channels,
-            z_down=z_down, 
-            padding_mode=padding_mode
-        )
-
-
         self.tpv = TPVGenerator(
             embed_dims=geo_feat_channels,
             split=[8, 8, 8],
@@ -92,12 +80,15 @@ class RefHead_TPV_Lseg_V3(nn.Module):
             embed_dims=geo_feat_channels,
         )
 
-        self.decoder_256 = Decoder(
-            geo_feat_channels=geo_feat_channels
-        )
-
         self.pred_head_256 = Header(geo_feat_channels, num_class)
-        self.pred_head_128 = Header(geo_feat_channels, num_class)
+
+        self.use_sgm = use_sgm
+
+        if self.use_sgm == 'ce_loss':
+            self.sh = SemanticBranch(
+                in_channels=geo_feat_channels, 
+                num_classes=num_class,
+                )
 
 
         # voxel losses
@@ -131,32 +122,40 @@ class RefHead_TPV_Lseg_V3(nn.Module):
 
         x_256 = self.conv_in(x)
 
-        #x_128 = self.geo_encoder_128(x_256)
-        #tpv_feat, _ = self.tpv(x_128)
-
         tpv_feat, _ = self.tpv(x_256)
 
-        yz = tpv_feat[2]
+        if self.use_sgm == 'no_use':
+            loss_dict = {}
+
+        elif self.use_sgm == 'contrastive_loss':
+            yz = tpv_feat[2]
+
+            if self.training:
+                loss_dict = contrastive_loss_with_pseudo_masks(X = yz, S = image_seg)
+            else:
+                loss_dict = {}
         
+        elif self.use_sgm == 'ce_loss':
+            yz = tpv_feat[2]
 
-        # img
+            if self.training:
+                loss_dict = self.sh(x = yz, s = image_seg)
+            else:
+                loss_dict = {}
 
-        print(image_seg.size())
-        #tpv_feat_128 = self.sgm_128(tpv_feat, seg_feat[1])
+        tpv_feat[0] = tpv_feat[0].unsqueeze(-1)
+        tpv_feat[1] = tpv_feat[1].unsqueeze(2)
+        tpv_feat[2] = tpv_feat[2].unsqueeze(3)
 
-        x_128, _ = self.fuser(tpv_feat_128, x_128)
-
-        x_256 = self.decoder_256(x_256, x_128)
-
+        x_256, _ = self.fuser(tpv_feat, x_256)
         x_256 = self.pred_head_256(x_256)
-        x_128 = self.pred_head_128(x_128)
 
-        return x_128, x_256
+        return x_256, loss_dict
 
     def loss(self, output_voxels_list, target_voxels_list):
         loss_dict = {}
         
-        suffixes = [128, 256]
+        suffixes = [256]
 
         for suffix, (output_voxels, target_voxels) in zip(suffixes, zip(output_voxels_list, target_voxels_list)):
             loss_dict[f'loss_voxel_ce_{suffix}'] = self.loss_voxel_ce_weight * CE_ssc_loss(output_voxels, target_voxels, self.class_weights.type_as(output_voxels), ignore_index=255)
@@ -164,6 +163,48 @@ class RefHead_TPV_Lseg_V3(nn.Module):
             loss_dict[f'loss_voxel_geo_scal_{suffix}'] = self.loss_voxel_geo_scal_weight * geo_scal_loss(output_voxels, target_voxels, ignore_index=255, non_empty_idx=self.empty_idx)
 
         return loss_dict
+
+
+class SemanticBranch(nn.Module):
+    def __init__(self, in_channels, num_classes):
+        super(SemanticBranch, self).__init__()
+        self.semantic_head = nn.Conv2d(in_channels, num_classes, kernel_size=1)
+
+    def semantic_gt_resize(self, x, s):
+        # ----------------------------------------------------
+        # 1) 下采样伪语义分割掩码 S 使其与 X 的 spatial 分辨率对齐
+        # ----------------------------------------------------
+        # X.shape = [1, C, Y, Z] = [1, 32, 256, 32]
+        # S.shape = [1, 1, 384, 1280]
+        # 我们用最近邻插值 (nearest) 的方式下采样到 (H=32, W=256)
+
+        x = rearrange(x, 'b c y z -> b c z y')
+        # X.shape = [1, C, H, W] = [1, 32, 32, 256]
+
+        B, Cx, H, W = x.shape  # B=1, Cx=32, H=32, W=256
+        s = F.interpolate(
+            s.float(), 
+            size=(H, W), 
+            mode='nearest'
+        ).long()  # 变为 [1, 1, 32, 256]
+
+        s = s.squeeze(1) # 变为 [1, 32, 256]
+
+        return x, s
+
+    def forward(self, x, s):
+        x, s = self.semantic_gt_resize(x, s)
+        x = self.semantic_head(x)
+
+        loss = F.cross_entropy(x, s)
+
+        loss_dict = {}
+
+        loss_dict[f'loss_ce_ss_256'] = loss
+
+        return loss_dict
+
+
 
 def contrastive_loss_with_pseudo_masks(X, S, num_classes=20, tau=0.1):
     # ----------------------------------------------------
@@ -188,9 +229,13 @@ def contrastive_loss_with_pseudo_masks(X, S, num_classes=20, tau=0.1):
     #    这里的做法：对属于同一类的像素特征取平均
     # ----------------------------------------------------
     # 先把特征图展平为 [1, Cx, H*W]
-    X_flat = X.view(B, Cx, -1)  # [1, 32, 32*256] = [1, 32, 8192]
+    X_flat = rearrange(X, 'b c z y -> b c (z y)')
+
+    #X_flat = X.view(B, Cx, -1)  # [1, 32, 32*256] = [1, 32, 8192]
+
     # 把掩码也展平为 [1, H*W]
-    S_flat = S.view(B, -1) # [1, 32*256] = [1, 8192]
+    #S_flat = S.view(B, -1) # [1, 32*256] = [1, 8192]
+    S_flat = rearrange(S, 'b c h w -> b (c h w)')
 
     # 收集所有类别的原型向量
     prototypes = []
@@ -201,7 +246,7 @@ def contrastive_loss_with_pseudo_masks(X, S, num_classes=20, tau=0.1):
         if mask_cls.sum() > 0:
             # 只收集属于该类的位置
             # X_flat[:, :, mask_cls] -> [1, 32, (该类像素数)]
-            feat_cls = X_flat[:, :, mask_cls]
+            feat_cls = X_flat[:, :, mask_cls.squeeze(0)]
             # 先在最后一个维度 (像素数) 做平均 -> 得到 [1, 32]
             proto_cls = feat_cls.mean(dim=2)  # [1, 32]
         else:
@@ -241,7 +286,11 @@ def contrastive_loss_with_pseudo_masks(X, S, num_classes=20, tau=0.1):
     # 若需要支持 batch>1，则需做一些 reshape/flatten 再一次性计算。
     loss = F.cross_entropy(logits[0], target[0], reduction='mean')
 
-    return loss
+    loss_dict = {}
+
+    loss_dict[f'loss_contrastive_256'] = loss
+
+    return loss_dict
 
 
 if __name__ == '__main__':
@@ -253,7 +302,7 @@ if __name__ == '__main__':
         data_root=CONF.PATH.DATA_ROOT,
         ann_file=CONF.PATH.DATA_LABEL,
         pred_model='CGFormer',
-         vlm_model = 'Lseg',
+        vlm_model = 'Lseg',
         split='train'
         )
 
@@ -265,19 +314,8 @@ if __name__ == '__main__':
         num_class=20,
         geo_feat_channels=32,
         img_feat_channels=2048,
-        kv_dim=256,
         z_down=True,
-        dim_head=8,
-        heads=4,
-        ffn_cfg=dict(
-            type='FFN',
-            embed_dims=32,
-            feedforward_channels=1024,
-            num_fcs=2,
-            act_cfg=dict(type='ReLU', inplace=True),
-            ffn_drop=0.1,
-            add_identity=True
-        ),
+        use_sgm='ce_loss',
 
         balance_cls_weight=True,
         class_frequencies=[
@@ -291,3 +329,14 @@ if __name__ == '__main__':
 
     rh(voxel, image, image_seg)
     
+    # print(voxel.size())
+    # print(image_seg.size())
+
+    # yz = torch.randn(1, 32, 256, 32).cuda()
+    # print(yz.size())
+
+    # contrastive_loss_with_pseudo_masks(
+    #     X = yz, 
+    #     S = image_seg
+    # )
+

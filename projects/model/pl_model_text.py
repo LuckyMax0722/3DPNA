@@ -8,14 +8,14 @@ from projects.loss import SSCMetrics
 from projects.loss import get_inv_map
 
 
-class pl_model(pl.LightningModule):
+class pl_model_text(pl.LightningModule):
     def __init__(
         self,
         model,
         model_version,
         config
         ):
-        super(pl_model, self).__init__()
+        super(pl_model_text, self).__init__()
 
         self.model = model
         self.model_version = model_version
@@ -33,78 +33,49 @@ class pl_model(pl.LightningModule):
         self.pretrain = config['model']['pretrain']
         
     def forward_train(self, data_dict):
-        img = data_dict['img']
-        gt_occ = data_dict['gt_occ']  # [1, 256, 256, 32]
-        gt_occ_2 = data_dict['gt_occ_2']  # [1, 128, 128, 16]
-        gt_occ_4 = data_dict['gt_occ_4']  # [1, 64, 64, 8]
-        gt_occ_8 = data_dict['gt_occ_8']  # [1, 32, 32, 4]
+        gt_occ_256 = data_dict['gt_occ']  # [1, 256, 256, 32]
+        gt_occ_128 = data_dict['gt_occ_2']  # [1, 128, 128, 16]
+        gt_occ_64 = data_dict['gt_occ_4']  # [1, 64, 64, 8]
+        gt_occ_32 = data_dict['gt_occ_8']  # [1, 32, 32, 4]
 
         input_occ = data_dict['input_occ'] # [1, 256, 256, 32]
         
         losses = dict()
 
-        if self.model_version == 'vqvae':
-            x1, x2, x4, vq_loss = self.model(input_occ)
-
-            losses_vqvae = self.model.loss_vq(vq_loss)
-
-            losses.update(losses_vqvae)
+        if self.model_version == 'text':
+            x_32, x_64, x_128, x_256 = self.model(input_occ, data_dict['text'])
 
             losses_occupancy = self.model.loss(
-                output_voxels_list=[x1['ssc_logit'], x2['ssc_logit'], x4['ssc_logit']],
-                target_voxels_list=[gt_occ, gt_occ_2, gt_occ_4],
-            )
-
-        elif self.model_version == 'cvae':
-            x1, x2, x4, x8 = self.model(input_occ, img)
-
-            losses_occupancy = self.model.loss(
-                output_voxels_list=[x1['ssc_logit'], x2['ssc_logit'], x4['ssc_logit'], x8['ssc_logit']],
-                target_voxels_list=[gt_occ, gt_occ_2, gt_occ_4, gt_occ_8],
-            )
-
-        else:
-            x1, x2, x4, x8 = self.model(input_occ)
-
-            losses_occupancy = self.model.loss(
-                output_voxels_list=[x1['ssc_logit'], x2['ssc_logit'], x4['ssc_logit'], x8['ssc_logit']],
-                target_voxels_list=[gt_occ, gt_occ_2, gt_occ_4, gt_occ_8],
+                output_voxels_list=[x_32, x_64, x_128, x_256],
+                target_voxels_list=[gt_occ_32, gt_occ_64, gt_occ_128, gt_occ_256],
             )
 
 
         losses.update(losses_occupancy)
 
-        pred = x1['ssc_logit']
-        pred = torch.argmax(pred, dim=1)
+        pred = torch.argmax(x_256, dim=1)
             
         train_output = {
             'losses': losses,
             'pred': pred,
-            'gt_occ': gt_occ
+            'gt_occ': gt_occ_256
         }
 
         return train_output
 
     def forward_test(self, data_dict):
-        img = data_dict['img']
         input_occ = data_dict['input_occ'] # [1, 256, 256, 32]
-        gt_occ = data_dict['gt_occ']
+        gt_occ_256 = data_dict['gt_occ']
+
+        if self.model_version == 'text':
+            x_32, x_64, x_128, x_256 = self.model(input_occ, data_dict['text'])
 
 
-        if self.model_version == 'vqvae':
-            x1, x2, x4, _ = self.model(input_occ)
-        elif self.model_version == 'cvae':
-            x1, x2, x4, x8 = self.model(input_occ, img)
-        else:
-            x1, x2, x4, x8 = self.model(input_occ)
-
-        
-        pred = x1['ssc_logit']
-        pred = torch.argmax(pred, dim=1)
+        pred = torch.argmax(x_256, dim=1)
 
         test_output = {
             'pred': pred,
-            'gt_occ': gt_occ
+            'gt_occ': gt_occ_256
         }
 
         return test_output
