@@ -112,6 +112,7 @@ class Header(nn.Module):
 class UNet(nn.Module):
     def __init__(self, 
         geo_feat_channels,
+        text_model,
         ffn_cfg
     ):
 
@@ -164,26 +165,64 @@ class UNet(nn.Module):
             geo_feat_channels
         )
 
-        # self.crosstextattn_16 = TextAttention(
-        #     geo_feat_channels,
-        #     ffn_cfg
-        # )
 
-        # self.crosstextattn_32 = TextAttention(
-        #     geo_feat_channels,
-        #     ffn_cfg
-        # )
+        self.text_model = text_model
 
-        # self.crosstextattn_64 = TextAttention(
-        #     geo_feat_channels,
-        #     ffn_cfg
-        # )
+        if text_model == 'BLIP2':
+            # self.crosstextattn_16 = TextAttention(
+            #     geo_feat_channels,
+            #     ffn_cfg
+            # )
 
-        # self.crosstextattn_128 = TextAttention(
-        #     geo_feat_channels,
-        #     ffn_cfg
-        # )
+            # self.crosstextattn_32 = TextAttention(
+            #     geo_feat_channels,
+            #     ffn_cfg
+            # )
 
+            # self.crosstextattn_64 = TextAttention(
+            #     geo_feat_channels,
+            #     ffn_cfg
+            # )
+
+            # self.crosstextattn_128 = TextAttention(
+            #     geo_feat_channels,
+            #     ffn_cfg
+            # )
+
+            self.crosstextattn_16 = DualCrossAttention(
+                geo_feat_channels=geo_feat_channels,
+            )
+
+            self.crosstextattn_32 = DualCrossAttention(
+                geo_feat_channels=geo_feat_channels,
+            )
+
+            self.crosstextattn_64 = DualCrossAttention(
+                geo_feat_channels=geo_feat_channels,
+            )
+
+            self.crosstextattn_128 = DualCrossAttention(
+                geo_feat_channels=geo_feat_channels,
+            )
+
+            
+        
+        elif text_model == 'CLIP':
+            self.sigm_16 = SemanticInteractionGuidanceModule(
+                geo_feat_channels=geo_feat_channels,
+            )
+
+            self.sigm_32 = SemanticInteractionGuidanceModule(
+                geo_feat_channels=geo_feat_channels,
+            )
+
+            self.sigm_64 = SemanticInteractionGuidanceModule(
+                geo_feat_channels=geo_feat_channels,
+            )
+
+            self.sigm_128 = SemanticInteractionGuidanceModule(
+                geo_feat_channels=geo_feat_channels,
+            )
 
 
     def forward(self, x, text):  # [b, geo_feat_channels, X, Y, Z]   
@@ -200,26 +239,54 @@ class UNet(nn.Module):
         
         x_16 = self.bottleneck(x) # x: ([1, 64, 16, 16, 2])
         
-        #x_16 = self.crosstextattn_16(x_16, text)
+        if self.text_model == 'BLIP2':
 
-        x_32 = self.decoder_block_4(skip_32, x_16)  # x: ([1, 64, 32, 32, 4])
-        
-        #x_32 = self.crosstextattn_32(x_32, text)
+            x_16 = self.crosstextattn_16(x_16, text)
 
-        x_64 = self.decoder_block_3(skip_64, x_32)  # x: ([1, 64, 64, 64, 8]) 
-        
-        #x_64 = self.crosstextattn_64(x_64, text)
+            x_32 = self.decoder_block_4(skip_32, x_16)  # x: ([1, 64, 32, 32, 4])
+            
+            x_32 = self.crosstextattn_32(x_32, text)
 
-        x_128 = self.decoder_block_2(skip_128, x_64)  # x: ([1, 64, 128, 128, 16])
-        
-        #x_128 = self.crosstextattn_128(x_128, text)
+            x_64 = self.decoder_block_3(skip_64, x_32)  # x: ([1, 64, 64, 64, 8]) 
+            
+            x_64 = self.crosstextattn_64(x_64, text)
 
-        x_256 = self.decoder_block_1(skip_256, x_128)  # x: ([1, 64, 256, 256, 32])
-        
+            x_128 = self.decoder_block_2(skip_128, x_64)  # x: ([1, 64, 128, 128, 16])
+            
+            x_128 = self.crosstextattn_128(x_128, text)
+
+            x_256 = self.decoder_block_1(skip_256, x_128)  # x: ([1, 64, 256, 256, 32])
+
+        elif self.text_model == 'CLIP':
+            x_16 = self.sigm_16(x_16, text)
+
+            x_32 = self.decoder_block_4(skip_32, x_16)  # x: ([1, 64, 32, 32, 4])
+            
+            x_32 = self.sigm_32(x_32, text)
+
+            x_64 = self.decoder_block_3(skip_64, x_32)  # x: ([1, 64, 64, 64, 8]) 
+            
+            x_64 = self.sigm_64(x_64, text)
+
+            x_128 = self.decoder_block_2(skip_128, x_64)  # x: ([1, 64, 128, 128, 16])
+            
+            x_128 = self.sigm_128(x_128, text)
+
+            x_256 = self.decoder_block_1(skip_256, x_128)  # x: ([1, 64, 256, 256, 32])
+
+        else:
+            x_32 = self.decoder_block_4(skip_32, x_16)  # x: ([1, 64, 32, 32, 4])
+
+            x_64 = self.decoder_block_3(skip_64, x_32)  # x: ([1, 64, 64, 64, 8]) 
+
+            x_128 = self.decoder_block_2(skip_128, x_64)  # x: ([1, 64, 128, 128, 16])
+
+            x_256 = self.decoder_block_1(skip_256, x_128)  # x: ([1, 64, 256, 256, 32])
+
         return x_32, x_64, x_128, x_256
 
 
-class TextAttention(nn.Module):
+class TextAttention(nn.Module):  # TGCA
     def __init__(self, 
         geo_feat_channels,
         ffn_cfg,
@@ -282,6 +349,119 @@ class TextAttention(nn.Module):
 
         return x
 
+class SemanticInteractionGuidanceModule(nn.Module):
+    def __init__(
+        self, 
+        geo_feat_channels,
+        text_dim=512
+        ):
+
+        super(SemanticInteractionGuidanceModule, self).__init__()
+
+        self.gamma_fc = nn.Linear(text_dim, geo_feat_channels)
+        self.beta_fc  = nn.Linear(text_dim, geo_feat_channels)
+
+    def forward(self, voxel_feat, text_feat):
+        """
+        fusion_feat: [B, T, H, W, C]
+        text_emb:    [B, d]
+        """
+        B, C, H, W, Z = voxel_feat.shape
+        
+        voxel_feat = rearrange(voxel_feat, 'b c h w z -> b h w z c')  
+
+        gamma = self.gamma_fc(text_feat)  # [B, C]
+        beta  = self.beta_fc(text_feat)   # [B, C]
+        
+        gamma = gamma.view(B, 1, 1, 1, C)
+        beta  = beta.view(B, 1, 1, 1, C)
+        
+        out = (1 + gamma) * voxel_feat + beta
+        
+        out = rearrange(out, 'b h w z c -> b c h w z')
+
+        return out
+
+class DualCrossAttention(nn.Module):
+    def __init__(
+        self, 
+        geo_feat_channels,
+        text_feat_channels=256,
+        attn_dropout=0.05,
+        relu_dropout=0.1, 
+        res_dropout=0.1, 
+        out_dropout=0.0, 
+        num_heads=4
+        ):
+
+        super(DualCrossAttention, self).__init__()
+
+        self.text_self_attention = nn.MultiheadAttention(
+            embed_dim=text_feat_channels, 
+            num_heads=num_heads, 
+            dropout=attn_dropout,
+            batch_first=True, 
+            )
+
+        self.text_cross_attention = nn.MultiheadAttention(
+            embed_dim=text_feat_channels, 
+            kdim=geo_feat_channels, 
+            vdim=geo_feat_channels, 
+            num_heads=num_heads, 
+            dropout=attn_dropout,
+            batch_first=True,
+            )
+
+        self.voxel_cross_attention = nn.MultiheadAttention(
+            embed_dim=geo_feat_channels,
+            kdim=text_feat_channels, 
+            vdim=text_feat_channels, 
+            num_heads=num_heads, 
+            dropout=attn_dropout,
+            batch_first=True,
+            )
+
+
+        self.mlp = nn.Sequential(
+            nn.Linear(text_feat_channels, 1024),
+            nn.ReLU(),
+            nn.Dropout(relu_dropout),
+            nn.Linear(1024, text_feat_channels),
+            nn.Dropout(res_dropout)
+        )
+
+        # Layer Normalization layers
+        self.text_layer_norm = nn.LayerNorm(text_feat_channels)
+        self.voxel_layer_norm = nn.LayerNorm(geo_feat_channels)
+
+    def forward(self, x, text):
+        '''
+        Input:
+            x: torch.size: [1, c, x, y, z]
+            text: torch.size: [1, seq, 256]
+        '''
+        bs, c, h, w, z = x.shape
+        x = rearrange(x, 'b c h w z -> b (h w z) c').contiguous()  # torch.Size([1, h * w * z, 32])
+
+        # Self-attention on text representation
+        text_self_att, _ = self.text_self_attention(query = text, key = text, value = text)  # (B, S, text_output_dim)
+
+        # Cross-attention: Text queries, Image keys and values
+        enhanced_text_feat, _ = self.text_cross_attention(query = text_self_att, key = x, value = x) 
+        text_feat = self.text_layer_norm(text_self_att + enhanced_text_feat)
+
+        # MLP on enhanced text representation
+        enhanced_text_feat_mlp = self.mlp(text_feat)  # (B, S, cross_attention_hidden_size)
+
+        # Cross-attention: Image queries, enhanced text keys and values
+        enhanced_voxel_feat, _ = self.voxel_cross_attention(query = x, key = enhanced_text_feat_mlp, value = enhanced_text_feat_mlp)
+        
+        x = self.voxel_layer_norm(x + enhanced_voxel_feat)
+
+        x = rearrange(x, 'b (h w z) c -> b c h w z', h=h, w=w, z=z)
+
+        return x
+   
 
 class PredHead(nn.Module):
     def __init__(self, 
@@ -310,6 +490,7 @@ class RefHead_Text(nn.Module):
         self,
         num_class,
         geo_feat_channels,
+        text_model,
         ffn_cfg,
 
         empty_idx=0,
@@ -326,6 +507,7 @@ class RefHead_Text(nn.Module):
         
         self.unet = UNet(
             geo_feat_channels=geo_feat_channels,
+            text_model=text_model,
             ffn_cfg=ffn_cfg
             )
         
@@ -387,21 +569,23 @@ if __name__ == '__main__':
     from configs.config import CONF
     from projects.datasets import SemanticKITTIDataModule, SemanticKITTIDataset
 
+    text_model='BLIP2'
+
     ds = SemanticKITTIDataset(
         data_root=CONF.PATH.DATA_ROOT,
         ann_file=CONF.PATH.DATA_LABEL,
         pred_model='CGFormer',
-        text_model='Blip2',
+        text_model=text_model,
         split='train'
         )
 
     voxel = ds[0]['input_occ'].unsqueeze(0).cuda()
-    text = ds[0]['text'].unsqueeze(0).cuda()
+    text = ds[0]['text_feat'].unsqueeze(0).cuda()
 
     rh = RefHead_Text(
         num_class=20,
         geo_feat_channels=32,
-
+        text_model=text_model,
         balance_cls_weight=True,
         class_frequencies=[
             5.41773033e09, 1.57835390e07, 1.25136000e05, 1.18809000e05, 6.46799000e05,
@@ -423,4 +607,6 @@ if __name__ == '__main__':
     ).cuda()
 
     x_32, x_64, x_128, x_256 = rh(voxel, text)
+
+    #print(x_256.size())
 
