@@ -113,7 +113,8 @@ class UNet(nn.Module):
     def __init__(self, 
         geo_feat_channels,
         text_model,
-        ffn_cfg
+        ffn_cfg,
+        encoder_version=None,
     ):
 
         super().__init__()
@@ -167,6 +168,7 @@ class UNet(nn.Module):
 
 
         self.text_model = text_model
+        self.encoder_version = encoder_version
 
         if text_model == 'BLIP2':
             # self.crosstextattn_16 = TextAttention(
@@ -225,20 +227,64 @@ class UNet(nn.Module):
             )
 
 
+        if encoder_version == 'text':
+            self.crosstextattn_encoder_128 = DualCrossAttention(
+                geo_feat_channels=geo_feat_channels,
+            )
+
+            self.crosstextattn_encoder_64 = DualCrossAttention(
+                geo_feat_channels=geo_feat_channels,
+            )
+
+            self.crosstextattn_encoder_32 = DualCrossAttention(
+                geo_feat_channels=geo_feat_channels,
+            )
+
+            self.crosstextattn_encoder_16 = DualCrossAttention(
+                geo_feat_channels=geo_feat_channels,
+            )
+
+
+
     def forward(self, x, text):  # [b, geo_feat_channels, X, Y, Z]   
+
+        if self.encoder_version == None:
+
+            x = self.conv0(x)  # x: ([1, 64, 256, 256, 32])
+            
+            skip_256, x = self.encoder_block_1(x) # skip1: ([1, 64, 256, 256, 32]) / x: ([1, 64, 128, 128, 16])
+            
+            skip_128, x = self.encoder_block_2(x) # skip2: ([1, 64, 128, 128, 16]) / x: ([1, 64, 64, 64, 8])
+            
+            skip_64, x = self.encoder_block_3(x) # skip3: ([1, 64, 64, 64, 8]) / x: ([1, 64, 32, 32, 4])
+            
+            skip_32, x = self.encoder_block_4(x) # skip4: ([1, 64, 32, 32, 4]) / x: ([1, 64, 16, 16, 2])
+            
+            x_16 = self.bottleneck(x) # x: ([1, 64, 16, 16, 2])
         
-        x = self.conv0(x)  # x: ([1, 64, 256, 256, 32])
-        
-        skip_256, x = self.encoder_block_1(x) # skip1: ([1, 64, 256, 256, 32]) / x: ([1, 64, 128, 128, 16])
-        
-        skip_128, x = self.encoder_block_2(x) # skip2: ([1, 64, 128, 128, 16]) / x: ([1, 64, 64, 64, 8])
-        
-        skip_64, x = self.encoder_block_3(x) # skip3: ([1, 64, 64, 64, 8]) / x: ([1, 64, 32, 32, 4])
-        
-        skip_32, x = self.encoder_block_4(x) # skip4: ([1, 64, 32, 32, 4]) / x: ([1, 64, 16, 16, 2])
-        
-        x_16 = self.bottleneck(x) # x: ([1, 64, 16, 16, 2])
-        
+        elif self.encoder_version == 'text':
+            
+            x = self.conv0(x)  # x: ([1, 64, 256, 256, 32])
+
+            skip_256, x = self.encoder_block_1(x) # skip1: ([1, 64, 256, 256, 32]) / x: ([1, 64, 128, 128, 16])
+            
+            x = self.crosstextattn_encoder_128(x, text)
+
+            skip_128, x = self.encoder_block_2(x) # skip2: ([1, 64, 128, 128, 16]) / x: ([1, 64, 64, 64, 8])
+            
+            x = self.crosstextattn_encoder_64(x, text)
+
+            skip_64, x = self.encoder_block_3(x) # skip3: ([1, 64, 64, 64, 8]) / x: ([1, 64, 32, 32, 4])
+            
+            x = self.crosstextattn_encoder_32(x, text)
+
+            skip_32, x = self.encoder_block_4(x) # skip4: ([1, 64, 32, 32, 4]) / x: ([1, 64, 16, 16, 2])
+            
+            x = self.crosstextattn_encoder_16(x, text)
+
+            x_16 = self.bottleneck(x) # x: ([1, 64, 16, 16, 2])
+
+
         if self.text_model == 'BLIP2':
 
             x_16 = self.crosstextattn_16(x_16, text)
@@ -458,7 +504,7 @@ class DualCrossAttention(nn.Module):
         
         x = self.voxel_layer_norm(x + enhanced_voxel_feat)
 
-        x = rearrange(x, 'b (h w z) c -> b c h w z', h=h, w=w, z=z)
+        x = rearrange(x, 'b (h w z) c -> b c h w z', h=h, w=w, z=z).contiguous()
 
         return x
    
@@ -508,6 +554,7 @@ class RefHead_Text(nn.Module):
         self.unet = UNet(
             geo_feat_channels=geo_feat_channels,
             text_model=text_model,
+            encoder_version='text',
             ffn_cfg=ffn_cfg
             )
         

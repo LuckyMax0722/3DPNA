@@ -43,7 +43,7 @@ class pl_model_text(pl.LightningModule):
         losses = dict()
 
         if self.model_version == 'text':
-            x_32, x_64, x_128, x_256 = self.model(input_occ, data_dict['text'])
+            x_32, x_64, x_128, x_256 = self.model(input_occ, data_dict['text_feat'])
 
             losses_occupancy = self.model.loss(
                 output_voxels_list=[x_32, x_64, x_128, x_256],
@@ -68,7 +68,7 @@ class pl_model_text(pl.LightningModule):
         gt_occ_256 = data_dict['gt_occ']
 
         if self.model_version == 'text':
-            x_32, x_64, x_128, x_256 = self.model(input_occ, data_dict['text'])
+            x_32, x_64, x_128, x_256 = self.model(input_occ, data_dict['text_feat'])
 
 
         pred = torch.argmax(x_256, dim=1)

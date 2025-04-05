@@ -163,6 +163,8 @@ class SemanticKITTIDataset(Dataset):
         # load text
         if self.text_model:
             input_dict['text'] = self.get_text_info(index, key='text_path')
+            input_dict['text_feat'] = self.get_text_feat_info(index, key='text_feat_path')
+            
 
         return input_dict
 
@@ -188,6 +190,11 @@ class SemanticKITTIDataset(Dataset):
         info = self.data_infos[index][key]
         
         return self.load_text(info)
+
+    def get_text_feat_info(self, index, key='text_feat_path'):
+        info = self.data_infos[index][key]
+        
+        return self.load_text_feat(info)
 
     def get_rot(self,h):
         return torch.Tensor([
@@ -288,6 +295,12 @@ class SemanticKITTIDataset(Dataset):
         return img
 
     def load_text(self, text_filename):
+        with open(text_filename, 'r', encoding='utf-8') as f:
+            sentence = f.read()
+        
+        return sentence
+    
+    def load_text_feat(self, text_filename):
         text = np.load(text_filename)
         text = torch.from_numpy(text)
 
@@ -304,7 +317,7 @@ class SemanticKITTIDataset(Dataset):
                 img_seg_base_path = os.path.join(self.data_root, "seg", self.vlm_model, sequence)
 
             if self.text_model:
-                text_base_path = os.path.join(self.data_root, "text", self.text_model, sequence)
+                text_base_path = os.path.join(self.data_root, "text") 
 
             id_base_path = os.path.join(self.data_root, "pred", self.pred_model, sequence, '*.npy')
 
@@ -326,9 +339,11 @@ class SemanticKITTIDataset(Dataset):
                     img_seg_path = None
 
                 if self.text_model:
-                    text_path = os.path.join(text_base_path, img_id + '.npy')
+                    text_path = os.path.join(text_base_path, 'Blip2', sequence, img_id + '.txt')
+                    text_feat_path = os.path.join(text_base_path, 'feat', self.text_model, sequence, img_id + '.npy')
                 else:
-                    img_seg_path = None
+                    text_path = None
+                    text_feat_path = None
 
                 # for sweep demo or test submission
                 if not os.path.exists(voxel_path):
@@ -351,7 +366,8 @@ class SemanticKITTIDataset(Dataset):
                         "voxel_path_8": voxel_path_8,
                         "img_2_path": img_2_path,
                         "img_seg_path": img_seg_path,
-                        "text_path": text_path
+                        "text_path": text_path,
+                        "text_feat_path": text_feat_path
                     })
                 
         return scans  # return to self.data_infos
@@ -365,15 +381,17 @@ if __name__ == '__main__':
         ann_file='/u/home/caoh/datasets/SemanticKITTI/dataset/labels',
         pred_model='CGFormer',
         #vlm_model='Lseg',
-        text_model='Blip2',
+        text_model='CLIP',
         split='train',
         occ_size=[256, 256, 32],
         pc_range=[0, -25.6, -2, 51.2, 25.6, 4.4],
     )
 
-    for i in range(1000):
+    #for i in range(1000):
         #print(s[0]['img'].size())
         #print(s[0]['img_seg'].size())
-        print(s[i]['text'].size())
+    i = 0
+    print(s[i]['text'])
+    print(s[i]['text_feat'].size())
         #print(s[0]['gt_occ'])
         #print(s[0]['gt_occ_2'])

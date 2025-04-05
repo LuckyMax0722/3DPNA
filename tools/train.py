@@ -9,7 +9,7 @@ import pytorch_lightning as pl
 from pytorch_lightning.loggers import TensorBoardLogger, CSVLogger
 
 from pytorch_lightning.strategies import DDPStrategy
-from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor
+from pytorch_lightning.callbacks import ModelCheckpoint, LearningRateMonitor, DeviceStatsMonitor
 
 
 from configs.config import CONF
@@ -279,9 +279,12 @@ def main():
             add_identity=True
         )
 
+        text_model='BLIP2'  # BLIP2, CLIP
+
         model = RefHead_Text(
             num_class=config["model"]["num_class"],
             geo_feat_channels=32,
+            text_model=text_model,
             ffn_cfg = ffn_cfg,
 
             loss_weight_cfg=config["model"]["loss_weight_cfg"],
@@ -301,7 +304,7 @@ def main():
             data_root=CONF.PATH.DATA_ROOT,
             ann_file=CONF.PATH.DATA_LABEL,
             pred_model=config["data"]["pred_model"],
-            text_model='Blip2',
+            text_model=text_model,
         )
 
 
@@ -351,6 +354,8 @@ def main():
         filename='{val/mIoU:.4f}'
         )
 
+    device_stats = DeviceStatsMonitor()
+
     # trainer
     trainer = pl.Trainer(
         devices=[i for i in range(num_gpu)],
@@ -362,7 +367,8 @@ def main():
         max_epochs=config["training"]['training_epochs'],
         callbacks=[
             checkpoint_callback,
-            LearningRateMonitor(logging_interval='step')
+            LearningRateMonitor(logging_interval='step'),
+            device_stats
         ],
         logger=logger,
         profiler="simple",
@@ -371,7 +377,7 @@ def main():
         check_val_every_n_epoch=config["training"]['check_val_every_n_epoch']
     )
 
-    #trainer.fit(model=model, datamodule=dm, ckpt_path="/u/home/caoh/projects/MA_Jiachen/3DPNA/output_new/ckpts/version_1/epoch_epoch=009-mIoU=val/mIoU=0.1720.ckpt")
+    #trainer.fit(model=model, datamodule=dm, ckpt_path="/u/home/caoh/projects/MA_Jiachen/3DPNA/a_tmp/ckpts/version_3/last.ckpt")
     trainer.fit(model=model, datamodule=dm)
     
 if __name__ == "__main__":
