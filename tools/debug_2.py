@@ -24,12 +24,6 @@ def att(v, i):
 
 if __name__ == '__main__':
     # python /u/home/caoh/projects/MA_Jiachen/3DPNA/tools/debug_2.py
-    voxel = torch.randn(1, 32, 128, 32)
-    img = torch.randn(1, 512, 128, 32)
-
-    voxel = rearrange(voxel, 'b c h w -> b (h w) c')
-    img = rearrange(img, 'b c h w -> b (h w) c')
-
-    att(voxel, img)
-    print(voxel.size())
-    print(img.size())
+    import numpy as np
+    text_f = np.load('/u/home/caoh/datasets/SemanticKITTI/dataset/text/feat/CLIP/00/000000.npy')
+    print(text_f.dtype)

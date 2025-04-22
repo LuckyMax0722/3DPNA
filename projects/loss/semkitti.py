@@ -92,7 +92,9 @@ def geo_scal_loss(pred, ssc_target, ignore_index=255, non_empty_idx=0):
 
 def sem_scal_loss(pred, ssc_target, ignore_index=255):
     # Get softmax probabilities
-    pred = F.softmax(pred, dim=1)
+    #pred = F.softmax(pred, dim=1)
+    pred = F.log_softmax(pred, dim=1).exp()
+
     loss = 0
     count = 0
     mask = ssc_target != ignore_index
@@ -150,3 +152,30 @@ def CE_ssc_loss(pred, target, class_weights=None, ignore_index=255):
 
 def vel_loss(pred, gt):
     return F.l1_loss(pred, gt)
+
+
+def KL_loss(pna_branch, text_branch):
+    """
+    计算两个分支输出之间的对称 KL 散度损失。
+
+    参数:
+        pna_branch: Tensor，形状为 [B, C, D, H, W]，第一个分支的 logits 输出。
+        text_branch: Tensor，形状为 [B, C, D, H, W]，第二个分支的 logits 输出。
+
+    返回:
+        对称 KL 散度损失值。
+    """
+
+    # 计算 softmax 概率分布
+    prob1 = F.softmax(pna_branch, dim=1)
+    prob2 = F.softmax(text_branch, dim=1)
+
+    log_prob1 = F.log_softmax(pna_branch, dim=1)
+    log_prob2 = F.log_softmax(text_branch, dim=1)
+
+    # 计算两个方向的 KL 散度
+    kl_1_to_2 = F.kl_div(log_prob1, prob2, reduction="mean")
+    kl_2_to_1 = F.kl_div(log_prob2, prob1, reduction="mean")
+
+    # 返回对称 KL 散度
+    return (kl_1_to_2 + kl_2_to_1) / 2

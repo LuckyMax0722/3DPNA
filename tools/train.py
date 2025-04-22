@@ -17,7 +17,11 @@ from projects.datasets import SemanticKITTIDataModule, SemanticKITTIDataset
 
 from projects.model import RefHead, pl_model, pl_model_diff, pl_model_lseg, RefHead_PNA, RefHead_VQ, RefHead_CVAE
 from projects.model import RefHead_TPV_Lseg, RefHead_TPV_Lseg_V2, RefHead_TPV_Lseg_V3, RefHead_TPV_Lseg_V3_FS
-from projects.model import RefHead_Text, pl_model_text
+from projects.model import RefHead_Text, pl_model_text, RefHead_Text_PNA
+
+
+from projects.model.rh_pna_v2 import RefHead_PNA_V2
+from projects.pl_tools.pl_model_v2 import pl_model_v2
 
 from projects.model.diffusion import RefHead_D
 
@@ -38,13 +42,13 @@ def load_config(config_path):
 # python /u/home/caoh/projects/MA_Jiachen/3DPNA/tools/train.py
 
 def main():
-    model_version = 'text'  # small, pna, vqvae cvae, diffusion, lseg
+    model_version = 'pna'  # small, pna, vqvae cvae, diffusion, lseg, pna_v2
     baseline_model = 'CGFormer'  # CGFormer, MonoScene
     debug = True
 
     skip_version='concat'  # plus, concat, none
     encoder_version='conv'  # conv, aspp
-    conv_version='v2'   # v1, v2
+    conv_version='v1'   # v1, v2
     head_version='conv'     # mlp, conv
 
     use_skip=True
@@ -279,7 +283,7 @@ def main():
             add_identity=True
         )
 
-        text_model='BLIP2'  # BLIP2, CLIP
+        text_model='JinaCLIP'  # BLIP2, CLIP, LongCLIP, JinaCLIP
 
         model = RefHead_Text(
             num_class=config["model"]["num_class"],
@@ -307,6 +311,106 @@ def main():
             text_model=text_model,
         )
 
+    elif model_version == 'text_pna':
+        ffn_cfg=dict(
+            type='FFN',
+            embed_dims=32,
+            feedforward_channels=512,
+            num_fcs=2,
+            act_cfg=dict(type='ReLU', inplace=True),
+            ffn_drop=0.1,
+            add_identity=True
+        )
+
+        text_model='BLIP2'  # BLIP2, CLIP
+
+        kernel_size = [[3,3,3], [5,5,5], [7,7,7]]
+        dilation = [[1,1,1], [1,1,1], [1,1,1]]
+
+        model = RefHead_Text_PNA(
+            num_class=config["model"]["num_class"],
+            geo_feat_channels=32,
+            text_model=text_model,
+            ffn_cfg = ffn_cfg,
+
+            loss_weight_cfg=config["model"]["loss_weight_cfg"],
+            balance_cls_weight=config["model"]["balance_cls_weight"],
+            class_frequencies=CONF.semantic_kitti_class_frequencies,
+            num_heads=8,
+            kernel_size=kernel_size,
+            dilation=dilation,
+            rel_pos_bias=True,
+            qkv_bias=True,
+            attn_drop=0.1,
+            proj_drop=0.1,
+            use_fna=False,
+        )
+
+        model = pl_model_text(
+            model=model,
+            model_version='text',
+            config=config
+            )
+
+        
+        dm = SemanticKITTIDataModule(
+            dataset=SemanticKITTIDataset,
+            data_root=CONF.PATH.DATA_ROOT,
+            ann_file=CONF.PATH.DATA_LABEL,
+            pred_model=config["data"]["pred_model"],
+            text_model=text_model,
+        )
+
+
+    elif model_version == 'pna_v2':
+        ffn_cfg=dict(
+            type='FFN',
+            embed_dims=32,
+            feedforward_channels=512,
+            num_fcs=2,
+            act_cfg=dict(type='ReLU', inplace=True),
+            ffn_drop=0.1,
+            add_identity=True
+        )
+
+        kernel_size = [[3,3,3], [5,5,5], [5,5,5]]
+        dilation = [[1,1,1], [1,1,1], [1,1,1]]
+
+        model = RefHead_PNA_V2(
+            num_class=config["model"]["num_class"],
+            geo_feat_channels=32,
+
+            loss_weight_cfg=config["model"]["loss_weight_cfg"],
+            balance_cls_weight=config["model"]["balance_cls_weight"],
+            class_frequencies=CONF.semantic_kitti_class_frequencies,
+
+            ffn_cfg = ffn_cfg,
+            num_heads=4,
+            kernel_size=kernel_size,
+            dilation=dilation,
+            rel_pos_bias=True,
+            qkv_bias=True,
+            attn_drop=0.1,
+            proj_drop=0.1,
+            use_fna=False,
+        )
+
+        model = pl_model_v2(
+            model=model,
+            model_version=model_version,
+            config=config
+            )
+        
+        dm = SemanticKITTIDataModule(
+            dataset=SemanticKITTIDataset,
+            data_root=CONF.PATH.DATA_ROOT,
+            ann_file=CONF.PATH.DATA_LABEL,
+            pred_model=config["data"]["pred_model"],
+            text_model=None,
+        )
+
+
+
 
     if model_version == 'diffusion':
         model = pl_model_diff(
@@ -318,7 +422,10 @@ def main():
     elif model_version == 'lseg':
         pass
 
-    elif model_version == 'text':
+    elif model_version == 'text' or model_version == 'text_pna':
+        pass
+
+    elif model_version == 'pna_v2':
         pass
 
     else:

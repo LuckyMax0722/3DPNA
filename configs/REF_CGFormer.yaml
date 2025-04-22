@@ -2,7 +2,7 @@ data:
   pred_model: CGFormer
 
 model:
-  embed_dim: 64
+  embed_dim: 32
   loss_weight_cfg:
     loss_voxel_ce_weight: 1.0
     loss_voxel_sem_scal_weight: 1.0
@@ -38,8 +38,8 @@ training:
   seed: 7240
   log_every_n_steps: 50
   check_val_every_n_epoch: 1
-  training_steps: 40000
-  training_epochs: 20
+  training_steps: 20000
+  training_epochs: 10
 
 optimizer:
   type: AdamW
@@ -49,7 +49,7 @@ optimizer:
 lr_scheduler:
   type: OneCycleLR
   max_lr: 0.00003
-  total_steps: 40000
+  total_steps: 20000
   pct_start: 0.05
   cycle_momentum: false
   anneal_strategy: cos

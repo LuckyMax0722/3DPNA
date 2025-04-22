@@ -1,1 +1,2 @@
 from .NCA3D import NeighborhoodCrossAttention3D
+from .NSA3D import NeighborhoodSelfAttention3D

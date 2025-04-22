@@ -114,7 +114,6 @@ class UNet(nn.Module):
         geo_feat_channels,
         text_model,
         ffn_cfg,
-        encoder_version=None,
     ):
 
         super().__init__()
@@ -168,66 +167,15 @@ class UNet(nn.Module):
 
 
         self.text_model = text_model
-        self.encoder_version = encoder_version
+
+        self.text_model_dim = {
+            'CLIP' : 512,
+            'JinaCLIP' : 512,
+            'LongCLIP' : 768,
+            'JinaCLIP_1024' : 1024,
+        }
 
         if text_model == 'BLIP2':
-            # self.crosstextattn_16 = TextAttention(
-            #     geo_feat_channels,
-            #     ffn_cfg
-            # )
-
-            # self.crosstextattn_32 = TextAttention(
-            #     geo_feat_channels,
-            #     ffn_cfg
-            # )
-
-            # self.crosstextattn_64 = TextAttention(
-            #     geo_feat_channels,
-            #     ffn_cfg
-            # )
-
-            # self.crosstextattn_128 = TextAttention(
-            #     geo_feat_channels,
-            #     ffn_cfg
-            # )
-
-            self.crosstextattn_16 = DualCrossAttention(
-                geo_feat_channels=geo_feat_channels,
-            )
-
-            self.crosstextattn_32 = DualCrossAttention(
-                geo_feat_channels=geo_feat_channels,
-            )
-
-            self.crosstextattn_64 = DualCrossAttention(
-                geo_feat_channels=geo_feat_channels,
-            )
-
-            self.crosstextattn_128 = DualCrossAttention(
-                geo_feat_channels=geo_feat_channels,
-            )
-
-            
-        
-        elif text_model == 'CLIP':
-            self.sigm_16 = SemanticInteractionGuidanceModule(
-                geo_feat_channels=geo_feat_channels,
-            )
-
-            self.sigm_32 = SemanticInteractionGuidanceModule(
-                geo_feat_channels=geo_feat_channels,
-            )
-
-            self.sigm_64 = SemanticInteractionGuidanceModule(
-                geo_feat_channels=geo_feat_channels,
-            )
-
-            self.sigm_128 = SemanticInteractionGuidanceModule(
-                geo_feat_channels=geo_feat_channels,
-            )
-
-
-        if encoder_version == 'text':
             self.crosstextattn_encoder_128 = DualCrossAttention(
                 geo_feat_channels=geo_feat_channels,
             )
@@ -243,27 +191,72 @@ class UNet(nn.Module):
             self.crosstextattn_encoder_16 = DualCrossAttention(
                 geo_feat_channels=geo_feat_channels,
             )
+            
+            self.crosstextattn_decoder_16 = DualCrossAttention(
+                geo_feat_channels=geo_feat_channels,
+            )
+
+            self.crosstextattn_decoder_32 = DualCrossAttention(
+                geo_feat_channels=geo_feat_channels,
+            )
+
+            self.crosstextattn_decoder_64 = DualCrossAttention(
+                geo_feat_channels=geo_feat_channels,
+            )
+
+            self.crosstextattn_decoder_128 = DualCrossAttention(
+                geo_feat_channels=geo_feat_channels,
+            )
+
+        elif text_model in self.text_model_dim:
+            text_dim = self.text_model_dim[text_model]
+
+            self.sigm_encoder_16 = SemanticInteractionGuidanceModule(
+                geo_feat_channels=geo_feat_channels,
+                text_dim=text_dim,
+            )
+
+            self.sigm_encoder_32 = SemanticInteractionGuidanceModule(
+                geo_feat_channels=geo_feat_channels,
+                text_dim=text_dim,
+            )
+
+            self.sigm_encoder_64 = SemanticInteractionGuidanceModule(
+                geo_feat_channels=geo_feat_channels,
+                text_dim=text_dim,
+            )
+
+            self.sigm_encoder_128 = SemanticInteractionGuidanceModule(
+                geo_feat_channels=geo_feat_channels,
+                text_dim=text_dim,
+            )
+
+            self.sigm_decoder_16 = SemanticInteractionGuidanceModule(
+                geo_feat_channels=geo_feat_channels,
+                text_dim=text_dim,
+            )
+
+            self.sigm_decoder_32 = SemanticInteractionGuidanceModule(
+                geo_feat_channels=geo_feat_channels,
+                text_dim=text_dim,
+            )
+
+            self.sigm_decoder_64 = SemanticInteractionGuidanceModule(
+                geo_feat_channels=geo_feat_channels,
+                text_dim=text_dim,
+            )
+
+            self.sigm_decoder_128 = SemanticInteractionGuidanceModule(
+                geo_feat_channels=geo_feat_channels,
+                text_dim=text_dim,
+            )
 
 
 
     def forward(self, x, text):  # [b, geo_feat_channels, X, Y, Z]   
 
-        if self.encoder_version == None:
+        if self.text_model == 'BLIP2':
 
-            x = self.conv0(x)  # x: ([1, 64, 256, 256, 32])
-            
-            skip_256, x = self.encoder_block_1(x) # skip1: ([1, 64, 256, 256, 32]) / x: ([1, 64, 128, 128, 16])
-            
-            skip_128, x = self.encoder_block_2(x) # skip2: ([1, 64, 128, 128, 16]) / x: ([1, 64, 64, 64, 8])
-            
-            skip_64, x = self.encoder_block_3(x) # skip3: ([1, 64, 64, 64, 8]) / x: ([1, 64, 32, 32, 4])
-            
-            skip_32, x = self.encoder_block_4(x) # skip4: ([1, 64, 32, 32, 4]) / x: ([1, 64, 16, 16, 2])
-            
-            x_16 = self.bottleneck(x) # x: ([1, 64, 16, 16, 2])
-        
-        elif self.encoder_version == 'text':
-            
             x = self.conv0(x)  # x: ([1, 64, 256, 256, 32])
 
             skip_256, x = self.encoder_block_1(x) # skip1: ([1, 64, 256, 256, 32]) / x: ([1, 64, 128, 128, 16])
@@ -284,43 +277,73 @@ class UNet(nn.Module):
 
             x_16 = self.bottleneck(x) # x: ([1, 64, 16, 16, 2])
 
-
-        if self.text_model == 'BLIP2':
-
-            x_16 = self.crosstextattn_16(x_16, text)
+            x_16 = self.crosstextattn_decoder_16(x_16, text)
 
             x_32 = self.decoder_block_4(skip_32, x_16)  # x: ([1, 64, 32, 32, 4])
             
-            x_32 = self.crosstextattn_32(x_32, text)
+            x_32 = self.crosstextattn_decoder_32(x_32, text)
 
             x_64 = self.decoder_block_3(skip_64, x_32)  # x: ([1, 64, 64, 64, 8]) 
             
-            x_64 = self.crosstextattn_64(x_64, text)
+            x_64 = self.crosstextattn_decoder_64(x_64, text)
 
             x_128 = self.decoder_block_2(skip_128, x_64)  # x: ([1, 64, 128, 128, 16])
             
-            x_128 = self.crosstextattn_128(x_128, text)
+            x_128 = self.crosstextattn_decoder_128(x_128, text)
 
             x_256 = self.decoder_block_1(skip_256, x_128)  # x: ([1, 64, 256, 256, 32])
 
-        elif self.text_model == 'CLIP':
-            x_16 = self.sigm_16(x_16, text)
+
+        elif self.text_model in self.text_model_dim:
+            x = self.conv0(x)  # x: ([1, 64, 256, 256, 32])
+
+            skip_256, x = self.encoder_block_1(x) # skip1: ([1, 64, 256, 256, 32]) / x: ([1, 64, 128, 128, 16])
+            
+            x = self.sigm_encoder_128(x, text)
+
+            skip_128, x = self.encoder_block_2(x) # skip2: ([1, 64, 128, 128, 16]) / x: ([1, 64, 64, 64, 8])
+            
+            x = self.sigm_encoder_64(x, text)
+
+            skip_64, x = self.encoder_block_3(x) # skip3: ([1, 64, 64, 64, 8]) / x: ([1, 64, 32, 32, 4])
+            
+            x = self.sigm_encoder_32(x, text)
+
+            skip_32, x = self.encoder_block_4(x) # skip4: ([1, 64, 32, 32, 4]) / x: ([1, 64, 16, 16, 2])
+            
+            x = self.sigm_encoder_16(x, text)
+
+            x_16 = self.bottleneck(x) # x: ([1, 64, 16, 16, 2])
+
+            x_16 = self.sigm_decoder_16(x_16, text)
 
             x_32 = self.decoder_block_4(skip_32, x_16)  # x: ([1, 64, 32, 32, 4])
             
-            x_32 = self.sigm_32(x_32, text)
+            x_32 = self.sigm_decoder_32(x_32, text)
 
             x_64 = self.decoder_block_3(skip_64, x_32)  # x: ([1, 64, 64, 64, 8]) 
             
-            x_64 = self.sigm_64(x_64, text)
+            x_64 = self.sigm_decoder_64(x_64, text)
 
             x_128 = self.decoder_block_2(skip_128, x_64)  # x: ([1, 64, 128, 128, 16])
             
-            x_128 = self.sigm_128(x_128, text)
+            x_128 = self.sigm_decoder_128(x_128, text)
 
             x_256 = self.decoder_block_1(skip_256, x_128)  # x: ([1, 64, 256, 256, 32])
 
         else:
+            x = self.conv0(x)  # x: ([1, 64, 256, 256, 32])
+
+            skip_256, x = self.encoder_block_1(x) # skip1: ([1, 64, 256, 256, 32]) / x: ([1, 64, 128, 128, 16])
+            
+            skip_128, x = self.encoder_block_2(x) # skip2: ([1, 64, 128, 128, 16]) / x: ([1, 64, 64, 64, 8])
+
+            skip_64, x = self.encoder_block_3(x) # skip3: ([1, 64, 64, 64, 8]) / x: ([1, 64, 32, 32, 4])
+
+            skip_32, x = self.encoder_block_4(x) # skip4: ([1, 64, 32, 32, 4]) / x: ([1, 64, 16, 16, 2])
+
+            x_16 = self.bottleneck(x) # x: ([1, 64, 16, 16, 2])
+
             x_32 = self.decoder_block_4(skip_32, x_16)  # x: ([1, 64, 32, 32, 4])
 
             x_64 = self.decoder_block_3(skip_64, x_32)  # x: ([1, 64, 64, 64, 8]) 
@@ -331,69 +354,6 @@ class UNet(nn.Module):
 
         return x_32, x_64, x_128, x_256
 
-
-class TextAttention(nn.Module):  # TGCA
-    def __init__(self, 
-        geo_feat_channels,
-        ffn_cfg,
-        text_feat_channels = 256,
-        num_heads = 4
-    ):
-        super(TextAttention, self).__init__()
-
-        embed_dim = geo_feat_channels
-
-        # Norm Input
-        self.norm_input_text =nn.LayerNorm(text_feat_channels)
-        self.norm_input_voxel =nn.InstanceNorm1d(embed_dim)
-
-        # CrossAttention
-        self.crossattn = nn.MultiheadAttention(
-            embed_dim = embed_dim, 
-            num_heads = num_heads, 
-            bias=True, 
-            kdim=text_feat_channels, 
-            vdim=text_feat_channels, 
-            batch_first=True, 
-        )
-
-        # Norm Output
-        self.norm_output_voxel =nn.InstanceNorm1d(embed_dim)
-
-        # FFN Layer
-        self.ffn = build_feedforward_network(ffn_cfg)
-
-
-    def forward(self, x, text):
-        '''
-        Input:
-            x: torch.size: [1, c, x, y, z]
-            text: torch.size: [1, c, 256]
-        '''
-        bs, c, h, w, z = x.shape
-        x = rearrange(x, 'b c h w z -> b (h w z) c')  # torch.Size([1, h * w * z, 32])
-
-        # use_residual
-        identity_x = x
-        identity_text = text
-
-        # Norm
-        x = self.norm_input_voxel(x)
-        text = self.norm_input_text(text)
-
-        # CrossAttention
-        attn_output, attn_output_weights = self.crossattn(query = x, key = text, value = text)
-
-        # Norm
-        x = self.norm_output_voxel(attn_output + x)
-
-        # FFN
-        x = self.ffn(x, identity_x)
-
-        # FFN output
-        x = rearrange(x, 'b (h w z) c -> b c h w z', h=h, w=w, z=z)
-
-        return x
 
 class SemanticInteractionGuidanceModule(nn.Module):
     def __init__(
@@ -508,7 +468,6 @@ class DualCrossAttention(nn.Module):
 
         return x
    
-
 class PredHead(nn.Module):
     def __init__(self, 
         geo_feat_channels,
@@ -554,7 +513,6 @@ class RefHead_Text(nn.Module):
         self.unet = UNet(
             geo_feat_channels=geo_feat_channels,
             text_model=text_model,
-            encoder_version='text',
             ffn_cfg=ffn_cfg
             )
         
@@ -616,7 +574,7 @@ if __name__ == '__main__':
     from configs.config import CONF
     from projects.datasets import SemanticKITTIDataModule, SemanticKITTIDataset
 
-    text_model='BLIP2'
+    text_model='LongCLIP'
 
     ds = SemanticKITTIDataset(
         data_root=CONF.PATH.DATA_ROOT,

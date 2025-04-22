@@ -17,3 +17,5 @@ from .rh_tpv_lseg_v3 import RefHead_TPV_Lseg_V3
 from .rh_tpv_lseg_v3_fs import RefHead_TPV_Lseg_V3_FS
 
 from .rh_text import RefHead_Text
+
+from .rh_text_pna import RefHead_Text_PNA

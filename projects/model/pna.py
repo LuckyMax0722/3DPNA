@@ -37,8 +37,8 @@ class ProgressiveNeighborhoodAggregation(nn.Module): # progressive neighborhood 
             dilation=dilation,
             rel_pos_bias=True,
             qkv_bias=qkv_bias,
-            attn_drop=0.0,
-            proj_drop=0.0,
+            attn_drop=attn_drop,
+            proj_drop=proj_drop,
             use_fna=use_fna,
         )
 
